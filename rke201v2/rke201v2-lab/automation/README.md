@@ -18,8 +18,20 @@ YaST feature: **a second CD/DVD volume labeled exactly `OEMDRV`, containing
 `autoinst.xml` at its root, is auto-detected with no boot parameter at all.**
 
 So each VM gets two virtual DVD drives:
-1. The existing Leap 16.0 offline installer ISO (boot device, unchanged from the main README)
+1. The Leap 16.0 offline installer ISO (boot device)
 2. A small generated ISO labeled `OEMDRV` containing that VM's AutoYaST profile
+
+**The installer ISO must be a local path on the Hyper-V host**, e.g.
+`C:\HyperV\iso\Leap-16.0-offline-installer-x86_64.install.iso` (set at the top
+of `03-create-vms-unattended.ps1`) - copy the ISO there before running it.
+Hyper-V's VM Management Service runs as a machine identity, not your own user,
+and generally **cannot authenticate to a remote SMB share** even when your own
+interactive session can reach it fine; pointing `Add-VMDvdDrive` at a UNC path
+like `\\fileserver\share\...` fails with `Logon failure: the user has not been
+granted the requested logon type at this computer`. **This path is
+environment-specific** - if you run this on a different server or a different
+Hyper-V host, update `$InstallerIsoPath` in `03-create-vms-unattended.ps1` (and
+the note here) to wherever the ISO actually lives locally on *that* machine.
 
 The installer boots, finds the OEMDRV profile automatically, partitions the
 disk(s), installs the OS, sets the hostname/static IP/user/SSH, runs a
@@ -121,3 +133,16 @@ systemctl status sshd
 - **OEMDRV not detected**: confirm the second DVD drive's ISO volume label is
   exactly `OEMDRV` (case-sensitive) and `autoinst.xml` is at its root, not in
   a subfolder - `02-build-oemdrv-isos.ps1` handles both automatically.
+- **"No operating system was loaded" on first boot**: means the installer DVD
+  never actually attached. Check with `Get-VMDvdDrive -VMName <name>` - if only
+  the `*-oemdrv.iso` shows up and the Leap installer ISO is missing, the VM is
+  stuck with a non-bootable disc as its boot device. The most common cause is
+  `$InstallerIsoPath` pointing at a remote UNC share - Hyper-V's VM Management
+  Service can't authenticate to it (`Logon failure: the user has not been
+  granted the requested logon type at this computer`), so `Add-VMDvdDrive`
+  fails even though the path is reachable from your own interactive session.
+  Fix: copy the ISO to a local path on the Hyper-V host and point
+  `$InstallerIsoPath` at that instead (see "How it works" above).
+  `03-create-vms-unattended.ps1` now fails loudly instead of continuing when
+  this happens; if you already hit it, remove the affected VM(s) and their
+  `C:\HyperV\<name>` folder, then re-run `03-create-vms-unattended.ps1`.

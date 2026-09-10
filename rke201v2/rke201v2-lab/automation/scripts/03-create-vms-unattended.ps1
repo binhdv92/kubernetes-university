@@ -6,11 +6,18 @@
 # Prerequisites (all within this automation/ folder):
 #   - Hyper-V switch/NAT already created (00-create-network.ps1)
 #   - OEMDRV ISOs already built (02-build-oemdrv-isos.ps1)
+#   - Leap 16.0 installer ISO copied to a LOCAL path on this host (see
+#     $InstallerIsoPath below - this is environment-specific, adjust it if
+#     the ISO lives somewhere else on this machine)
 # =====================================================================
 
 $SwitchName = "rke201-network"
 
-$InstallerIsoPath = "\\fs-22175.fs.local\d$\ISO\Leap-16.0-offline-installer-x86_64.install.iso"
+# Local path - Hyper-V's VM Management Service runs as a machine identity that
+# generally can't authenticate to a remote SMB share (a "double-hop"/logon-type
+# failure), even when your own interactive session can reach it fine. Copy the
+# ISO here first; see automation/README.md for details.
+$InstallerIsoPath = "C:\HyperV\iso\Leap-16.0-offline-installer-x86_64.install.iso"
 $OemdrvIsoDir     = Join-Path $PSScriptRoot "..\oemdrv-iso"
 
 # ---------------------------------------------------------------------
@@ -57,6 +64,11 @@ if (-not (Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue))
     throw "Switch '$SwitchName' not found. Run 00-create-network.ps1 first."
 }
 
+if (-not (Test-Path $InstallerIsoPath))
+{
+    throw "Installer ISO not found at $InstallerIsoPath. Copy the Leap 16.0 installer ISO to this local path first (see automation/README.md)."
+}
+
 foreach ($VM in $VMs)
 {
     $OemdrvIsoPath = Join-Path $OemdrvIsoDir "$($VM.Role)-oemdrv.iso"
@@ -95,7 +107,8 @@ foreach ($VM in $VMs)
             -Path $VMPath `
             -NewVHDPath "$VHDPath\$VMName.vhdx" `
             -NewVHDSizeBytes ($VM.DiskGB * 1GB) `
-            -SwitchName $SwitchName
+            -SwitchName $SwitchName `
+            -ErrorAction Stop
 
         Set-VMProcessor `
             -VMName $VMName `
@@ -115,31 +128,43 @@ foreach ($VM in $VMs)
 
         Set-VMFirmware `
             -VMName $VMName `
-            -EnableSecureBoot On `
-            -SecureBootTemplate "MicrosoftUEFICertificateAuthority"
+            -EnableSecureBoot Off `
+            -SecureBootTemplate "MicrosoftUEFICertificateAuthority" `
+            -ErrorAction Stop
 
         if ($VM.SecondDiskGB)
         {
             $SecondVHDPath = "$VHDPath\$VMName-data.vhdx"
-            New-VHD -Path $SecondVHDPath -SizeBytes ($VM.SecondDiskGB * 1GB) -Dynamic | Out-Null
-            Add-VMHardDiskDrive -VMName $VMName -Path $SecondVHDPath
+            New-VHD -Path $SecondVHDPath -SizeBytes ($VM.SecondDiskGB * 1GB) -Dynamic -ErrorAction Stop | Out-Null
+            Add-VMHardDiskDrive -VMName $VMName -Path $SecondVHDPath -ErrorAction Stop
         }
 
         # DVD 1: Leap 16.0 installer (boot device)
         Add-VMDvdDrive `
             -VMName $VMName `
-            -Path $InstallerIsoPath
+            -Path $InstallerIsoPath `
+            -ErrorAction Stop
 
         # DVD 2: OEMDRV volume with the AutoYaST autoinst.xml (auto-detected by YaST)
         Add-VMDvdDrive `
             -VMName $VMName `
-            -Path (Join-Path $OemdrvIsoDir "$($VM.Role)-oemdrv.iso")
+            -Path (Join-Path $OemdrvIsoDir "$($VM.Role)-oemdrv.iso") `
+            -ErrorAction Stop
 
-        $InstallerDvd = Get-VMDvdDrive -VMName $VMName | Select-Object -First 1
+        # Identify the installer drive by path rather than position/order, so a
+        # partial attach failure can never silently make the wrong (non-bootable)
+        # drive "first" - it fails loudly here instead.
+        $InstallerDvd = Get-VMDvdDrive -VMName $VMName | Where-Object { $_.Path -eq $InstallerIsoPath }
+
+        if (-not $InstallerDvd)
+        {
+            throw "Could not find the installer DVD drive on $VMName after attaching it - Add-VMDvdDrive may have failed."
+        }
 
         Set-VMFirmware `
             -VMName $VMName `
-            -FirstBootDevice $InstallerDvd
+            -FirstBootDevice $InstallerDvd `
+            -ErrorAction Stop
 
         Start-VM -Name $VMName
 
