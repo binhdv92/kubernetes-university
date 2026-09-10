@@ -1,0 +1,40 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nginx-hello-strip-prefix
+  namespace: sample-apps
+spec:
+  stripPrefix:
+    prefixes:
+      - /nginx-hello
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nginx-hello-path
+  namespace: sample-apps
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: sample-apps-nginx-hello-strip-prefix@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: k3s-master1
+      http:
+        paths:
+          - path: /nginx-hello
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx-hello
+                port:
+                  number: 80
+    - host: rancher-mes.firstsolar.com
+      http:
+        paths:
+          - path: /nginx-hello
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx-hello
+                port:
+                  number: 80

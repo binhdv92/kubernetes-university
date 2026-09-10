@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-hostname
+  namespace: sample-apps
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: fastapi-hostname
+  template:
+    metadata:
+      labels:
+        app: fastapi-hostname
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: fastapi-hostname
+      containers:
+        - name: fastapi-hostname
+          image: fastapi-hostname:1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-hostname
+  namespace: sample-apps
+spec:
+  type: NodePort
+  selector:
+    app: fastapi-hostname
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30090

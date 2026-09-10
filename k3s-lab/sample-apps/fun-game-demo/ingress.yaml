@@ -1,0 +1,50 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: fun-game-demo-strip-prefix
+  namespace: sample-apps
+spec:
+  stripPrefix:
+    prefixes:
+      - /fun-game-demo
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fun-game-demo-path
+  namespace: sample-apps
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: sample-apps-fun-game-demo-strip-prefix@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: k3s-master1
+      http:
+        paths:
+          - path: /fun-game-demo
+            pathType: Prefix
+            backend:
+              service:
+                name: fun-game-demo
+                port:
+                  number: 8000
+    - host: rancher-mes.firstsolar.com
+      http:
+        paths:
+          - path: /fun-game-demo
+            pathType: Prefix
+            backend:
+              service:
+                name: fun-game-demo
+                port:
+                  number: 8000
+    - host: fs-25007.fs.local
+      http:
+        paths:
+          - path: /fun-game-demo
+            pathType: Prefix
+            backend:
+              service:
+                name: fun-game-demo
+                port:
+                  number: 8000
