@@ -3,9 +3,9 @@
 # unattended AutoYaST install (no manual installer clicks, no manual
 # hostname/static-IP/SSH setup afterwards).
 #
-# Prerequisites:
-#   - Hyper-V switch/NAT already created (../../scripts/00-create-network.ps1)
-#   - OEMDRV ISOs already built (01-build-oemdrv-isos.ps1 in this folder)
+# Prerequisites (all within this automation/ folder):
+#   - Hyper-V switch/NAT already created (00-create-network.ps1)
+#   - OEMDRV ISOs already built (02-build-oemdrv-isos.ps1)
 # =====================================================================
 
 $SwitchName = "rke201-network"
@@ -54,7 +54,7 @@ $VMs = @(
 
 if (-not (Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue))
 {
-    throw "Switch '$SwitchName' not found. Run ..\..\scripts\00-create-network.ps1 first."
+    throw "Switch '$SwitchName' not found. Run 00-create-network.ps1 first."
 }
 
 foreach ($VM in $VMs)
@@ -62,7 +62,7 @@ foreach ($VM in $VMs)
     $OemdrvIsoPath = Join-Path $OemdrvIsoDir "$($VM.Role)-oemdrv.iso"
     if (-not (Test-Path $OemdrvIsoPath))
     {
-        throw "OEMDRV ISO not found: $OemdrvIsoPath. Run 01-build-oemdrv-isos.ps1 first."
+        throw "OEMDRV ISO not found: $OemdrvIsoPath. Run 02-build-oemdrv-isos.ps1 first."
     }
 }
 
@@ -176,4 +176,4 @@ Write-Host "Network   : 172.30.170.0/24"
 Write-Host "Switch    : $SwitchName"
 Write-Host ""
 Write-Host "Watch the first boot via Hyper-V Manager console to confirm no manual prompts appear."
-Write-Host "Then run 03-wait-for-ssh.ps1 to know when each VM is ready to SSH into."
+Write-Host "Then run 04-wait-for-ssh.ps1 to know when each VM is ready to SSH into."
