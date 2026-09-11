@@ -35,25 +35,6 @@ $OemdrvIsoDir     = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\o
 
 $VMs = @(
     @{
-        Name         = "RKE201-management"
-        Role         = "management"
-        Hostname     = "management.example.com"
-        IP           = "172.30.170.2"
-        CPU          = 2
-        MemoryGB     = 2
-        DiskGB       = 40
-        SecondDiskGB = 10
-    },
-    @{
-        Name     = "RKE201-server"
-        Role     = "server"
-        Hostname = "server.example.com"
-        IP       = "172.30.170.3"
-        CPU      = 2
-        MemoryGB = 6
-        DiskGB   = 40
-    },
-    @{
         Name     = "RKE201-agent"
         Role     = "agent"
         Hostname = "agent.example.com"

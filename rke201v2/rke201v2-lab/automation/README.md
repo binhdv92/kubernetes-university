@@ -31,12 +31,13 @@ the GRUB boot menu:
    window's **`Clipboard > Type Clipboard Text`** menu item (not Ctrl+V -
    that doesn't work this early in boot) to paste:
    ```
-   inst.auto=label://OEMDRV/profile.json rd.neednet=0
+   inst.auto=label://OEMDRV/profile.json rd.neednet=0 inst.install=1
    ```
    then press **`Ctrl-X`** (or **`F10`**) to boot.
 4. From that point on, the install is fully unattended: partitioning,
-   network, hostname, user/SSH setup, and the post-install script all happen
-   automatically, ending in a ready-to-SSH machine.
+   network, user/SSH setup, and the post-install script all happen
+   automatically, ending in a ready-to-SSH machine. Verified working
+   end-to-end on `RKE201-server` (correct hostname, static IP, `/etc/hosts`).
 
 **Why `rd.neednet=0` is required:** dracut (the Linux initrd) waits for
 networking to come up whenever `inst.auto=` is present, regardless of the
@@ -45,6 +46,26 @@ dracut can't know that in advance. This Hyper-V internal network has no DHCP
 server, so without `rd.neednet=0` the boot hangs indefinitely at
 `/dev/mapper/live-rw` waiting for a network that will never come up.
 `rd.neednet=0` tells dracut explicitly not to wait.
+
+**Why `inst.install=1` is required:** Agama's own docs say installation
+starts automatically once the profile is read, and only `inst.install=0`
+should pause it for manual review - but on this specific installed Agama
+build, installation stopped at a manual "Install" confirmation button
+regardless, unless `inst.install=1` was explicitly set. Likely a
+version-specific default mismatch (see the `l10n`/`hostname` note below for
+the general pattern) rather than documented behavior.
+
+**Note on `hostname`/`localization` profile properties:** this installed
+Agama version does not reliably apply the profile's `hostname` or
+`localization` sections (confirmed: hostname stayed blank, timezone fell back
+to Agama's own `Europe/Berlin` default, in the installer's own review
+screens). Rather than chase the exact property names/shapes this specific
+build expects, each profile's post-install script sets these directly instead
+(`/etc/hostname`, `/etc/localtime`, `/etc/locale.conf`, `/etc/vconsole.conf`)
+- a mechanism already proven reliable for `/etc/hosts`/sshd/sudoers. The
+`hostname`/`localization` profile sections are left in place regardless (in
+case a future Agama update on this media starts honoring them too), but don't
+rely on them.
 
 **Why a rebuilt/patched ISO is deliberately *not* used:** an earlier version
 of this automation rebuilt the installer ISO with `oscdimg` to bake the boot
@@ -221,16 +242,20 @@ systemctl status sshd
   is dracut waiting for network that will never come up on this isolated,
   DHCP-less internal switch. Reset the VM and redo the GRUB edit, double
   -checking the full pasted text reads
-  `inst.auto=label://OEMDRV/profile.json rd.neednet=0`.
+  `inst.auto=label://OEMDRV/profile.json rd.neednet=0 inst.install=1`.
+- **Agama loads the profile but stops at a manual "Install" confirmation
+  button**: missing `inst.install=1` from the boot parameter. Agama's docs say
+  installation should start automatically by default, but this installed
+  build needs it stated explicitly.
 - **Install still shows the interactive wizard instead of proceeding
   unattended**: the `inst.auto=` parameter wasn't applied - most likely you
   edited the wrong GRUB entry (must be `"Install Leap 16.0 (x86_64)"`, not
   "Failsafe"), or the pasted text didn't land at the very end of the `linux
   (...)` line. Reset and redo the edit carefully; double-check with the
   on-screen edit box that the full line reads `...splash=silent
-  inst.auto=label://OEMDRV/profile.json rd.neednet=0` (it will likely wrap
-  visually across two rows in the edit box - that's just display wrapping,
-  not a real line break).
+  inst.auto=label://OEMDRV/profile.json rd.neednet=0 inst.install=1` (it will
+  likely wrap visually across two rows in the edit box - that's just display
+  wrapping, not a real line break).
 - **"No operating system was loaded" on first boot**: means the installer DVD
   never actually attached. Check with `Get-VMDvdDrive -VMName <name>` - if only
   the `*-oemdrv.iso` shows up and the installer ISO is missing, the VM is

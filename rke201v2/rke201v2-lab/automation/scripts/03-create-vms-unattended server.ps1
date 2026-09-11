@@ -192,7 +192,7 @@ Write-Host "Gateway   : 172.30.170.1"
 Write-Host "Network   : 172.30.170.0/24"
 Write-Host "Switch    : $SwitchName"
 
-$BootParam = "inst.auto=label://OEMDRV/profile.json rd.neednet=0"
+$BootParam = "inst.auto=label://OEMDRV/profile.json rd.neednet=0 inst.install=1"
 
 try
 {
