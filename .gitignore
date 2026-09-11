@@ -218,4 +218,4 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Generated Agama OEMDRV ISO build artifacts
-rke201v2/rke201v2-lab/automation/oemdrv-iso/
+# rke201v2/rke201v2-lab/automation/oemdrv-iso/

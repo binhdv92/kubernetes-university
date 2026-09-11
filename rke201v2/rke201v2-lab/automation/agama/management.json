@@ -50,8 +50,8 @@
     ]
   },
   "software": {
-    "patterns": ["enhanced_base", "gnome", "x11"],
-    "packages": ["openssh", "chrony"]
+    "patterns": ["enhanced_base"],
+    "packages": ["openssh", "chrony", "gdm", "gnome-session-wayland"]
   },
   "questions": {
     "policy": "auto"
@@ -61,7 +61,7 @@
       {
         "name": "post-install.sh",
         "chroot": true,
-        "content": "#!/bin/sh\n# Agama's \"hostname\"/\"localization\" profile properties aren't reliably\n# applied by this installed Agama version (confirmed: hostname stayed blank,\n# timezone stayed at the Europe/Berlin default) - set them directly instead,\n# writing the config files systemd reads at boot rather than using\n# hostnamectl/localectl, which need a running systemd/D-Bus not available\n# inside this chroot.\necho \"management\" > /etc/hostname\nln -sf /usr/share/zoneinfo/America/Detroit /etc/localtime\necho \"LANG=en_US.UTF-8\" > /etc/locale.conf\necho \"KEYMAP=us\" > /etc/vconsole.conf\n\ncat >> /etc/hosts <<'EOF'\n\n# rke201-lab cluster\n# IP_ADDRESS FQDN SHORT_NAME\n172.30.170.2 \tmanagement.example.com\t\tmanagement\n172.30.170.3 \tserver.example.com\t\t\tserver\n172.30.170.4\tagent.example.com \t\t\tagent\nEOF\n\nsystemctl enable sshd\nsystemctl set-default graphical.target\n\nmkdir -p /etc/sudoers.d\necho '%wheel ALL=(ALL) ALL' > /etc/sudoers.d/wheel\nchmod 440 /etc/sudoers.d/wheel\n"
+        "content": "#!/bin/sh\n# Agama's \"hostname\"/\"localization\" profile properties aren't reliably\n# applied by this installed Agama version (confirmed: hostname stayed blank,\n# timezone stayed at the Europe/Berlin default) - set them directly instead,\n# writing the config files systemd reads at boot rather than using\n# hostnamectl/localectl, which need a running systemd/D-Bus not available\n# inside this chroot.\necho \"management\" > /etc/hostname\nln -sf /usr/share/zoneinfo/America/Detroit /etc/localtime\necho \"LANG=en_US.UTF-8\" > /etc/locale.conf\necho \"KEYMAP=us\" > /etc/vconsole.conf\n\ncat >> /etc/hosts <<'EOF'\n\n# rke201-lab cluster\n# IP_ADDRESS FQDN SHORT_NAME\n172.30.170.2 \tmanagement.example.com\t\tmanagement\n172.30.170.3 \tserver.example.com\t\t\tserver\n172.30.170.4\tagent.example.com \t\t\tagent\nEOF\n\nsystemctl enable sshd\n\n# \"software.patterns\" in the profile isn't applied either (confirmed via\n# rpm -qa showing zero gnome packages after install) - same as\n# hostname/localization, this installed Agama build doesn't wire it up.\n# The explicit \"gdm\"/\"gnome-session-wayland\" packages above are the\n# guaranteed-reliable fallback (software.packages does work), but also try\n# the actual normal-install recipe here in case the install media's repo is\n# still reachable at this post-install stage - if not, this is a harmless\n# no-op and the explicit packages above still provide a working desktop.\nzypper --non-interactive install --type pattern gnome_basic gnome gnome_x11 || true\n\n# \"systemctl set-default\" may try to validate the target via systemd/D-Bus,\n# which isn't running in this chroot (same constraint as hostnamectl above) -\n# create the default.target symlink directly instead, matching how\n# \"systemctl enable\" itself is just a symlink under the hood.\nln -sf /usr/lib/systemd/system/graphical.target /etc/systemd/system/default.target\n\nmkdir -p /etc/sudoers.d\necho '%wheel ALL=(ALL) ALL' > /etc/sudoers.d/wheel\nchmod 440 /etc/sudoers.d/wheel\n"
       }
     ]
   }
