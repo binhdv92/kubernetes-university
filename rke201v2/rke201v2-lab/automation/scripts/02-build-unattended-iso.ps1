@@ -140,6 +140,35 @@ function Get-ElToritoBootImages
     }
 }
 
+# Windows' Get-Volume/WMI FileSystemLabel truncates ISO9660 labels to 16
+# characters (e.g. "Install-Leap-16." instead of the real
+# "Install-Leap-16.0-x86_64"). dracut's live-root detection looks for
+# /dev/disk/by-label/<full label>, so an oscdimg rebuild using the
+# truncated label produces an ISO dracut can never find, dropping to a
+# "dracut:/#" emergency shell. Read the Volume Identifier directly from
+# the ISO9660 Primary Volume Descriptor (always at LBA 16, offset 40,
+# 32 bytes, space-padded) instead, to get the untruncated label.
+function Get-Iso9660VolumeLabel
+{
+    param(
+        [Parameter(Mandatory)] [string]$IsoPath
+    )
+
+    $Stream = [System.IO.File]::OpenRead($IsoPath)
+
+    try
+    {
+        $Stream.Seek(16L * 2048, [System.IO.SeekOrigin]::Begin) | Out-Null
+        $Pvd = New-Object byte[] 2048
+        $Stream.Read($Pvd, 0, $Pvd.Length) | Out-Null
+        return [System.Text.Encoding]::ASCII.GetString($Pvd, 40, 32).TrimEnd(' ')
+    }
+    finally
+    {
+        $Stream.Close()
+    }
+}
+
 if (Test-Path $ScratchDir)
 {
     Remove-Item -Recurse -Force $ScratchDir
@@ -160,11 +189,13 @@ Get-ElToritoBootImages -IsoPath $SourceIsoPath -BiosOutPath $BiosBootImage -Uefi
 $StagingDir = Join-Path $ScratchDir "files"
 New-Item -ItemType Directory -Force -Path $StagingDir | Out-Null
 
+$VolumeLabel = Get-Iso9660VolumeLabel -IsoPath $SourceIsoPath
+Write-Host "Source volume label: $VolumeLabel"
+
 Write-Host "Mounting source ISO..."
 $Mount = Mount-DiskImage -ImagePath $SourceIsoPath -PassThru
 $Volume = $Mount | Get-Volume
 $DriveLetter = $Volume.DriveLetter
-$VolumeLabel = $Volume.FileSystemLabel
 
 try
 {
@@ -219,17 +250,20 @@ else
 # ---------------------------------------------------------------------
 # 4. Rebuild a hybrid BIOS+UEFI bootable ISO with oscdimg
 #
-# ISO9660 + Joliet (no UDF): the source ISO is plain ISO9660 (with Rock
-# Ridge, standard for Linux-authored media, giving GRUB exact lowercase
-# filenames). oscdimg can't produce Rock Ridge, and building with
-# -u2/-udfver102 (UDF as the primary filesystem) leaves the ISO9660
-# fallback view with 8.3-mangled all-caps names and no Joliet - if GRUB
-# reads that view (as it does when matching the original's structure),
-# it can't find files like /boot/0xc28b255e or /boot/grub2/grub.cfg by
-# their real names and drops to a "grub>" rescue prompt instead of
-# booting. Joliet is the standard, well-supported alternative GRUB's
-# iso9660.mod reads for exact-case long filenames when Rock Ridge isn't
-# present, so we use that instead of UDF.
+# Plain ISO9660 with long+lowercase names (-n -d), no Joliet, no UDF:
+# the source ISO is plain ISO9660 (with Rock Ridge, standard for
+# Linux-authored media, giving GRUB/dracut exact lowercase filenames).
+# oscdimg can't produce Rock Ridge, so without -n/-d the ISO9660 view
+# gets 8.3-mangled all-caps names and GRUB can't find files like
+# /boot/0xc28b255e or /boot/grub2/grub.cfg by their real names (drops to
+# a "grub>" rescue prompt). -n/-d fix that directly on the primary
+# ISO9660 volume - no Joliet needed. This also matters for the volume
+# label: dracut's live-root detection looks for
+# /dev/disk/by-label/<full label>, but oscdimg caps Joliet's volume
+# label at 16 characters (silently truncated by Windows' own
+# Get-Volume too), while the primary ISO9660 label allows up to 32 -
+# our label is 24 characters, so Joliet would have broken it even if
+# used only for filenames.
 # ---------------------------------------------------------------------
 
 $OutputDir = Split-Path $OutputIsoPath -Parent
@@ -243,7 +277,7 @@ if (Test-Path $OutputIsoPath)
 $BootData = "2#p0,e,b`"$BiosBootImage`"#pEF,e,b`"$UefiBootImage`""
 
 $OscdimgArgs = @(
-    "-m", "-o", "-j2",
+    "-m", "-o", "-n", "-d",
     "-l$VolumeLabel",
     "-bootdata:$BootData",
     $StagingDir,
@@ -256,6 +290,31 @@ Write-Host "Running oscdimg (this can take a few minutes for a multi-GB ISO)..."
 if ($LASTEXITCODE -ne 0)
 {
     throw "oscdimg failed with exit code $LASTEXITCODE"
+}
+
+# oscdimg forces the ISO9660 Primary Volume Descriptor's Volume Identifier
+# to uppercase (strict spec compliance), but the real vendor label is
+# mixed-case and dracut's live-root search is case-sensitive - so
+# surgically overwrite just that 32-byte field (LBA 16, offset 40) with
+# the real label. blkid/dracut read this field directly, so this alone
+# is enough to fix /dev/disk/by-label/<label> detection; nothing else in
+# the volume needs to change.
+Write-Host "Restoring exact-case volume label (oscdimg forces uppercase)..."
+$LabelBytes = New-Object byte[] 32
+for ($i = 0; $i -lt 32; $i++) { $LabelBytes[$i] = 0x20 }
+$LabelSourceBytes = [System.Text.Encoding]::ASCII.GetBytes($VolumeLabel)
+[Array]::Copy($LabelSourceBytes, $LabelBytes, $LabelSourceBytes.Length)
+
+$IsoStream = [System.IO.File]::Open($OutputIsoPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite)
+try
+{
+    $IsoStream.Seek((16L * 2048) + 40, [System.IO.SeekOrigin]::Begin) | Out-Null
+    $IsoStream.Write($LabelBytes, 0, $LabelBytes.Length)
+    $IsoStream.Flush()
+}
+finally
+{
+    $IsoStream.Close()
 }
 
 Remove-Item -Recurse -Force $ScratchDir -ErrorAction SilentlyContinue

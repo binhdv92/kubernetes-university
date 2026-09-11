@@ -190,14 +190,32 @@ systemctl status sshd
 - **VM boots straight to a `grub>` rescue prompt (no menu, no OS)**: the
   rebuilt ISO's filesystem type doesn't match what GRUB expects. Check with
   `7z l automation\patched-iso\leap-16.0-unattended.iso` - it should report
-  `Type = Iso` (plain ISO9660 + Joliet), same as the original source ISO.
-  `oscdimg` can't produce Rock Ridge extensions (the Linux-standard way to
-  get exact-case long filenames on ISO9660), so if the build ever goes back
-  to `-u2`/`-udfver102` (UDF as the primary filesystem), the ISO9660
-  fallback view has 8.3-mangled all-caps names and GRUB can't find
+  `Type = Iso` (plain ISO9660), same as the original source ISO. `oscdimg`
+  can't produce Rock Ridge extensions (the Linux-standard way to get
+  exact-case long filenames on ISO9660), so if the build ever goes back to
+  `-u2`/`-udfver102` (UDF as the primary filesystem) instead of `-n -d`
+  (long + lowercase names on plain ISO9660, what the script uses), the
+  ISO9660 view gets 8.3-mangled all-caps names and GRUB can't find
   `/boot/0xc28b255e` or `/boot/grub2/grub.cfg` by their real names - hence
-  the rescue prompt. Joliet (`-j2`, what the script uses) is the
-  well-supported alternative GRUB reads for exact filenames instead.
+  the rescue prompt.
+- **VM boots past GRUB but lands at a `dracut:/#` emergency shell** (often
+  with `Warning: /dev/disk/by-label/<label> does not exist` visible just
+  above the prompt): the rebuilt ISO's volume label doesn't exactly match
+  what dracut's live-root detection is searching for. Two distinct causes,
+  both already handled by `02-build-unattended-iso.ps1`:
+  1. Windows' `Get-Volume`/WMI truncates ISO9660 labels to 16 characters
+     (e.g. `Install-Leap-16.` instead of the real `Install-Leap-16.0-x86_64`)
+     - the script reads the untruncated label directly from the ISO9660
+       Primary Volume Descriptor (`Get-Iso9660VolumeLabel`) instead.
+  2. `oscdimg` itself force-uppercases the volume label it writes (strict
+     ISO9660 spec compliance), but the real vendor label is mixed-case and
+     dracut's label match is case-sensitive - the script patches the 32-byte
+     Volume Identifier field (LBA 16, offset 40) after the build to restore
+     the exact original case.
+
+  If you ever see this failure again, verify with the same raw-byte read the
+  script uses: seek to byte `(16 * 2048) + 40` in the ISO and read 32 bytes -
+  it should read back exactly the source ISO's real label, case and all.
 - **Install still proceeds interactively despite using the patched ISO**:
   double-check `04-create-vms-unattended.ps1`'s `$InstallerIsoPath` actually
   points at `automation/patched-iso/leap-16.0-unattended.iso` (not the
