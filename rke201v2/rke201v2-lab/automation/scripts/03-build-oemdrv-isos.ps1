@@ -3,13 +3,10 @@
 #
 # Agama (openSUSE Leap 16.0's installer) does NOT auto-detect an OEMDRV
 # volume - it must be told where the profile is via the "inst.auto="
-# kernel boot parameter (see 03-create-vms-unattended.ps1's guidance and
-# automation/README.md). Agama does support "label://OEMDRV/profile.json"
-# as a location, so we still deliver the profile on an OEMDRV-labeled
-# ISO - it's just no longer auto-detected on its own. This script builds
-# that small ISO for each role using the built-in IMAPI2FS Windows COM
-# API, so no extra tool (oscdimg, ADK, etc.) needs to be installed on
-# the Hyper-V host.
+# kernel boot parameter, which 02-build-unattended-iso.ps1 already bakes
+# into the installer ISO's default GRUB entry (label://OEMDRV/profile.json).
+# This script builds the small OEMDRV-labeled ISO for each role using the
+# built-in IMAPI2FS Windows COM API - no extra tool needed for this part.
 # =====================================================================
 
 $AgamaDir  = Join-Path $PSScriptRoot "..\agama"

@@ -217,5 +217,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Generated AutoYaST OEMDRV ISO build artifacts
+# Generated Agama OEMDRV/unattended-installer ISO build artifacts
 rke201v2/rke201v2-lab/automation/oemdrv-iso/
+rke201v2/rke201v2-lab/automation/patched-iso/
+rke201v2/rke201v2-lab/automation/_scratch/

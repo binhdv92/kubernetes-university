@@ -1,25 +1,27 @@
 # =====================================================================
-# Create all 3 rke201v2-lab VMs and boot them toward a fully unattended
-# Agama install (no manual installer clicks, no manual hostname/static-IP
-# /SSH setup afterwards) - just one GRUB boot-parameter keystroke per VM,
-# see the summary this script prints at the end.
+# Create all 3 rke201v2-lab VMs and boot them into a fully unattended
+# Agama install - zero manual interaction, since the installer ISO
+# already has inst.auto=label://OEMDRV/profile.json baked into its
+# default GRUB entry (see 02-build-unattended-iso.ps1).
 #
 # Prerequisites (all within this automation/ folder):
 #   - Hyper-V switch/NAT already created (00-create-network.ps1)
-#   - OEMDRV ISOs already built (02-build-oemdrv-isos.ps1)
-#   - Leap 16.0 installer ISO copied to a LOCAL path on this host (see
-#     $InstallerIsoPath below - this is environment-specific, adjust it if
-#     the ISO lives somewhere else on this machine)
+#   - Unattended installer ISO already built (02-build-unattended-iso.ps1)
+#   - OEMDRV ISOs already built (03-build-oemdrv-isos.ps1)
 # =====================================================================
 
 $SwitchName = "rke201-network"
 
-# Local path - Hyper-V's VM Management Service runs as a machine identity that
-# generally can't authenticate to a remote SMB share (a "double-hop"/logon-type
-# failure), even when your own interactive session can reach it fine. Copy the
-# ISO here first; see automation/README.md for details.
-$InstallerIsoPath = "C:\HyperV\iso\Leap-16.0-offline-installer-x86_64.install.iso"
-$OemdrvIsoDir     = Join-Path $PSScriptRoot "..\oemdrv-iso"
+# Built by 02-build-unattended-iso.ps1 from the real Leap 16.0 installer
+# ISO, with the inst.auto= boot parameter already baked in - see that
+# script and automation/README.md for details.
+#
+# Resolved via GetFullPath (not just Join-Path) because Hyper-V normalizes
+# attached DVD paths internally - Get-VMDvdDrive later returns the collapsed
+# form, so comparing against an unresolved "...\..\..." string would never
+# match even though the drive attached correctly.
+$InstallerIsoPath = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\patched-iso\leap-16.0-unattended.iso"))
+$OemdrvIsoDir     = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\oemdrv-iso"))
 
 # ---------------------------------------------------------------------
 # VM Definitions
@@ -67,7 +69,7 @@ if (-not (Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue))
 
 if (-not (Test-Path $InstallerIsoPath))
 {
-    throw "Installer ISO not found at $InstallerIsoPath. Copy the Leap 16.0 installer ISO to this local path first (see automation/README.md)."
+    throw "Unattended installer ISO not found at $InstallerIsoPath. Run 02-build-unattended-iso.ps1 first."
 }
 
 foreach ($VM in $VMs)
@@ -75,7 +77,7 @@ foreach ($VM in $VMs)
     $OemdrvIsoPath = Join-Path $OemdrvIsoDir "$($VM.Role)-oemdrv.iso"
     if (-not (Test-Path $OemdrvIsoPath))
     {
-        throw "OEMDRV ISO not found: $OemdrvIsoPath. Run 02-build-oemdrv-isos.ps1 first."
+        throw "OEMDRV ISO not found: $OemdrvIsoPath. Run 03-build-oemdrv-isos.ps1 first."
     }
 }
 
@@ -146,8 +148,8 @@ foreach ($VM in $VMs)
             -Path $InstallerIsoPath `
             -ErrorAction Stop
 
-        # DVD 2: OEMDRV volume with the Agama profile.json (needs inst.auto=
-        # label://OEMDRV/profile.json typed at the GRUB menu - see below)
+        # DVD 2: OEMDRV volume with the Agama profile.json - the boot DVD's
+        # own GRUB config already points inst.auto= at this, no typing needed
         Add-VMDvdDrive `
             -VMName $VMName `
             -Path (Join-Path $OemdrvIsoDir "$($VM.Role)-oemdrv.iso") `
@@ -202,13 +204,7 @@ Write-Host "Gateway   : 172.30.170.1"
 Write-Host "Network   : 172.30.170.0/24"
 Write-Host "Switch    : $SwitchName"
 Write-Host ""
-Write-Host "ACTION NEEDED for each VM: Agama (the Leap 16.0 installer) has no"
-Write-Host "auto-detection - connect to each VM's console in Hyper-V Manager,"
-Write-Host "and at the GRUB boot menu:"
-Write-Host "  1. Press 'e' to edit the default entry"
-Write-Host "  2. Append to the end of the 'linux' line:"
-Write-Host "       inst.auto=label://OEMDRV/profile.json"
-Write-Host "  3. Press Ctrl-X (or F10) to boot"
-Write-Host "From that point on the install is fully unattended."
+Write-Host "No manual interaction needed - the installer ISO already boots"
+Write-Host "straight into the unattended Agama install for each VM."
 Write-Host ""
-Write-Host "Then run 04-wait-for-ssh.ps1 to know when each VM is ready to SSH into."
+Write-Host "Then run 05-wait-for-ssh.ps1 to know when each VM is ready to SSH into."
