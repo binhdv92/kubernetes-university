@@ -1,0 +1,68 @@
+{
+  "root": {
+    "hashedPassword": false,
+    "password": "linux"
+  },
+  "user": {
+    "fullName": "Tux Penguins",
+    "userName": "tux",
+    "hashedPassword": false,
+    "password": "linux"
+  },
+  "l10n": {
+    "locale": "en_US.UTF-8",
+    "keymap": "us",
+    "timezone": "America/Detroit"
+  },
+  "hostname": {
+    "static": "management.example.com"
+  },
+  "network": {
+    "connections": [
+      {
+        "id": "eth0-static",
+        "interface": "eth0",
+        "method4": "manual",
+        "addresses": ["172.30.170.2/24"],
+        "gateway4": "172.30.170.1",
+        "nameservers": ["8.8.8.8", "8.8.4.4"],
+        "autoconnect": true,
+        "persistent": true
+      }
+    ]
+  },
+  "storage": {
+    "drives": [
+      {
+        "search": "/dev/sda",
+        "partitions": [
+          { "generate": "default" }
+        ]
+      },
+      {
+        "search": "/dev/sdb",
+        "partitions": [
+          {
+            "filesystem": { "path": "/data/nfs-share", "type": "ext4" }
+          }
+        ]
+      }
+    ]
+  },
+  "software": {
+    "patterns": ["enhanced_base", "gnome", "x11"],
+    "packages": ["openssh", "chrony"]
+  },
+  "questions": {
+    "policy": "auto"
+  },
+  "scripts": {
+    "post": [
+      {
+        "name": "post-install.sh",
+        "chroot": true,
+        "content": "#!/bin/sh\ncat >> /etc/hosts <<'EOF'\n\n# rke201-lab cluster\n# IP_ADDRESS FQDN SHORT_NAME\n172.30.170.2 \tmanagement.example.com\t\tmanagement\n172.30.170.3 \tserver.example.com\t\t\tserver\n172.30.170.4\tagent.example.com \t\t\tagent\nEOF\n\nsystemctl enable sshd\nsystemctl set-default graphical.target\n\nmkdir -p /etc/sudoers.d\necho '%wheel ALL=(ALL) ALL' > /etc/sudoers.d/wheel\nchmod 440 /etc/sudoers.d/wheel\n"
+      }
+    ]
+  }
+}

@@ -1,21 +1,24 @@
 # =====================================================================
-# Build one OEMDRV-labeled ISO per AutoYaST profile.
+# Build one OEMDRV-labeled ISO per Agama profile.
 #
-# openSUSE's installer (YaST) auto-detects a second CD/DVD volume whose
-# label is exactly "OEMDRV" and containing an "autoinst.xml" at its root,
-# and uses it as the unattended install profile - no boot parameter
-# needed. This script builds that small ISO for each role using the
-# built-in IMAPI2FS Windows COM API, so no extra tool (oscdimg, ADK, etc.)
-# needs to be installed on the Hyper-V host.
+# Agama (openSUSE Leap 16.0's installer) does NOT auto-detect an OEMDRV
+# volume - it must be told where the profile is via the "inst.auto="
+# kernel boot parameter (see 03-create-vms-unattended.ps1's guidance and
+# automation/README.md). Agama does support "label://OEMDRV/profile.json"
+# as a location, so we still deliver the profile on an OEMDRV-labeled
+# ISO - it's just no longer auto-detected on its own. This script builds
+# that small ISO for each role using the built-in IMAPI2FS Windows COM
+# API, so no extra tool (oscdimg, ADK, etc.) needs to be installed on
+# the Hyper-V host.
 # =====================================================================
 
-$AutoyastDir = Join-Path $PSScriptRoot "..\autoyast"
-$OutputDir   = Join-Path $PSScriptRoot "..\oemdrv-iso"
+$AgamaDir  = Join-Path $PSScriptRoot "..\agama"
+$OutputDir = Join-Path $PSScriptRoot "..\oemdrv-iso"
 
 $Profiles = @(
-    @{ Role = "management"; Xml = "management.xml" },
-    @{ Role = "server";     Xml = "server.xml" },
-    @{ Role = "agent";      Xml = "agent.xml" }
+    @{ Role = "management"; Json = "management.json" },
+    @{ Role = "server";     Json = "server.json" },
+    @{ Role = "agent";      Json = "agent.json" }
 )
 
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
@@ -76,7 +79,7 @@ function New-OemdrvIso
 
     if (-not (Test-Path $ProfilePath))
     {
-        throw "AutoYaST profile not found: $ProfilePath"
+        throw "Agama profile not found: $ProfilePath"
     }
 
     $StagingDir = Join-Path $env:TEMP "oemdrv-$([guid]::NewGuid())"
@@ -84,7 +87,7 @@ function New-OemdrvIso
 
     try
     {
-        Copy-Item -Path $ProfilePath -Destination (Join-Path $StagingDir "autoinst.xml")
+        Copy-Item -Path $ProfilePath -Destination (Join-Path $StagingDir "profile.json")
 
         $Image = New-Object -ComObject IMAPI2FS.MsftFileSystemImage
         $Image.VolumeName = "OEMDRV"
@@ -109,7 +112,7 @@ function New-OemdrvIso
 
 foreach ($P in $Profiles)
 {
-    $ProfilePath  = Join-Path $AutoyastDir $P.Xml
+    $ProfilePath  = Join-Path $AgamaDir $P.Json
     $OutputIsoPath = Join-Path $OutputDir "$($P.Role)-oemdrv.iso"
 
     Write-Host "Building $OutputIsoPath from $ProfilePath..."

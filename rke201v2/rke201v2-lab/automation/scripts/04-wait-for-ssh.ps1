@@ -1,6 +1,6 @@
 # =====================================================================
 # Poll each VM's static IP on port 22 until SSH answers, so you know
-# the unattended AutoYaST install (partition, install, reboot) has
+# the unattended Agama install (partition, install, reboot) has
 # finished without having to watch the Hyper-V console the whole time.
 # =====================================================================
 

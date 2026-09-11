@@ -1,7 +1,8 @@
 # =====================================================================
-# Create all 3 rke201v2-lab VMs and boot them straight into a fully
-# unattended AutoYaST install (no manual installer clicks, no manual
-# hostname/static-IP/SSH setup afterwards).
+# Create all 3 rke201v2-lab VMs and boot them toward a fully unattended
+# Agama install (no manual installer clicks, no manual hostname/static-IP
+# /SSH setup afterwards) - just one GRUB boot-parameter keystroke per VM,
+# see the summary this script prints at the end.
 #
 # Prerequisites (all within this automation/ folder):
 #   - Hyper-V switch/NAT already created (00-create-network.ps1)
@@ -145,7 +146,8 @@ foreach ($VM in $VMs)
             -Path $InstallerIsoPath `
             -ErrorAction Stop
 
-        # DVD 2: OEMDRV volume with the AutoYaST autoinst.xml (auto-detected by YaST)
+        # DVD 2: OEMDRV volume with the Agama profile.json (needs inst.auto=
+        # label://OEMDRV/profile.json typed at the GRUB menu - see below)
         Add-VMDvdDrive `
             -VMName $VMName `
             -Path (Join-Path $OemdrvIsoDir "$($VM.Role)-oemdrv.iso") `
@@ -200,5 +202,13 @@ Write-Host "Gateway   : 172.30.170.1"
 Write-Host "Network   : 172.30.170.0/24"
 Write-Host "Switch    : $SwitchName"
 Write-Host ""
-Write-Host "Watch the first boot via Hyper-V Manager console to confirm no manual prompts appear."
+Write-Host "ACTION NEEDED for each VM: Agama (the Leap 16.0 installer) has no"
+Write-Host "auto-detection - connect to each VM's console in Hyper-V Manager,"
+Write-Host "and at the GRUB boot menu:"
+Write-Host "  1. Press 'e' to edit the default entry"
+Write-Host "  2. Append to the end of the 'linux' line:"
+Write-Host "       inst.auto=label://OEMDRV/profile.json"
+Write-Host "  3. Press Ctrl-X (or F10) to boot"
+Write-Host "From that point on the install is fully unattended."
+Write-Host ""
 Write-Host "Then run 04-wait-for-ssh.ps1 to know when each VM is ready to SSH into."
