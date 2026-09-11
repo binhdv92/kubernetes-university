@@ -1,26 +1,32 @@
 # =====================================================================
-# Create all 3 rke201v2-lab VMs and boot them into a fully unattended
-# Agama install - zero manual interaction, since the installer ISO
-# already has inst.auto=label://OEMDRV/profile.json baked into its
-# default GRUB entry (see 02-build-unattended-iso.ps1).
+# Create all 3 rke201v2-lab VMs and boot them toward the unattended Agama
+# install, using the REAL, UNMODIFIED Leap 16.0 installer ISO (no ISO
+# rebuild - that approach was tried and abandoned after several
+# low-level bugs). One manual step per VM is still required at boot -
+# see the instructions this script prints at the end - because Agama
+# has no OEMDRV-style auto-detection; it needs an inst.auto= kernel
+# boot parameter, and typing it into the installer ISO's GRUB config
+# reliably (without editing the ISO itself) isn't possible.
 #
 # Prerequisites (all within this automation/ folder):
 #   - Hyper-V switch/NAT already created (00-create-network.ps1)
-#   - Unattended installer ISO already built (02-build-unattended-iso.ps1)
-#   - OEMDRV ISOs already built (03-build-oemdrv-isos.ps1)
+#   - Leap 16.0 installer ISO copied to a LOCAL path on this host (see
+#     $InstallerIsoPath below - environment-specific, adjust if needed)
+#   - OEMDRV ISOs already built (02-build-oemdrv-isos.ps1)
 # =====================================================================
 
 $SwitchName = "rke201-network"
 
-# Built by 02-build-unattended-iso.ps1 from the real Leap 16.0 installer
-# ISO, with the inst.auto= boot parameter already baked in - see that
-# script and automation/README.md for details.
+# Local path - Hyper-V's VM Management Service runs as a machine identity that
+# generally can't authenticate to a remote SMB share (a "double-hop"/logon-type
+# failure), even when your own interactive session can reach it fine. Copy the
+# ISO here first; see automation/README.md for details.
 #
 # Resolved via GetFullPath (not just Join-Path) because Hyper-V normalizes
 # attached DVD paths internally - Get-VMDvdDrive later returns the collapsed
 # form, so comparing against an unresolved "...\..\..." string would never
 # match even though the drive attached correctly.
-$InstallerIsoPath = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\patched-iso\leap-16.0-unattended.iso"))
+$InstallerIsoPath = [System.IO.Path]::GetFullPath("C:\HyperV\iso\Leap-16.0-offline-installer-x86_64.install.iso")
 $OemdrvIsoDir     = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\oemdrv-iso"))
 
 # ---------------------------------------------------------------------
@@ -29,10 +35,29 @@ $OemdrvIsoDir     = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\o
 
 $VMs = @(
     @{
+        Name         = "RKE201-management"
+        Role         = "management"
+        Hostname     = "management.example.com"
+        IP           = "172.30.170.2"
+        CPU          = 2
+        MemoryGB     = 2
+        DiskGB       = 40
+        SecondDiskGB = 10
+    },
+    @{
         Name     = "RKE201-server"
         Role     = "server"
         Hostname = "server.example.com"
         IP       = "172.30.170.3"
+        CPU      = 2
+        MemoryGB = 6
+        DiskGB   = 40
+    },
+    @{
+        Name     = "RKE201-agent"
+        Role     = "agent"
+        Hostname = "agent.example.com"
+        IP       = "172.30.170.4"
         CPU      = 2
         MemoryGB = 6
         DiskGB   = 40
@@ -50,7 +75,7 @@ if (-not (Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue))
 
 if (-not (Test-Path $InstallerIsoPath))
 {
-    throw "Unattended installer ISO not found at $InstallerIsoPath. Run 02-build-unattended-iso.ps1 first."
+    throw "Installer ISO not found at $InstallerIsoPath. Copy the Leap 16.0 installer ISO to this local path first (see automation/README.md)."
 }
 
 foreach ($VM in $VMs)
@@ -58,7 +83,7 @@ foreach ($VM in $VMs)
     $OemdrvIsoPath = Join-Path $OemdrvIsoDir "$($VM.Role)-oemdrv.iso"
     if (-not (Test-Path $OemdrvIsoPath))
     {
-        throw "OEMDRV ISO not found: $OemdrvIsoPath. Run 03-build-oemdrv-isos.ps1 first."
+        throw "OEMDRV ISO not found: $OemdrvIsoPath. Run 02-build-oemdrv-isos.ps1 first."
     }
 }
 
@@ -129,8 +154,9 @@ foreach ($VM in $VMs)
             -Path $InstallerIsoPath `
             -ErrorAction Stop
 
-        # DVD 2: OEMDRV volume with the Agama profile.json - the boot DVD's
-        # own GRUB config already points inst.auto= at this, no typing needed
+        # DVD 2: OEMDRV volume with the Agama profile.json - still needs the
+        # inst.auto=label://OEMDRV/profile.json boot parameter added manually
+        # at the GRUB menu (see the instructions this script prints at the end)
         Add-VMDvdDrive `
             -VMName $VMName `
             -Path (Join-Path $OemdrvIsoDir "$($VM.Role)-oemdrv.iso") `
@@ -184,8 +210,35 @@ Write-Host ""
 Write-Host "Gateway   : 172.30.170.1"
 Write-Host "Network   : 172.30.170.0/24"
 Write-Host "Switch    : $SwitchName"
+
+$BootParam = "inst.auto=label://OEMDRV/profile.json rd.neednet=0"
+
+try
+{
+    Set-Clipboard -Value " $BootParam"
+    Write-Host ""
+    Write-Host "Your clipboard now holds the boot parameter text (see below) -"
+    Write-Host "ready to paste via VMConnect's Clipboard menu."
+}
+catch
+{
+    Write-Host ""
+    Write-Host "Could not set the clipboard automatically ($($_.Exception.Message))."
+    Write-Host "Copy this text yourself: $BootParam"
+}
+
 Write-Host ""
-Write-Host "No manual interaction needed - the installer ISO already boots"
-Write-Host "straight into the unattended Agama install for each VM."
+Write-Host "ACTION NEEDED for each VM - Agama has no OEMDRV auto-detection, so"
+Write-Host "connect to each VM's console in Hyper-V Manager and, at the GRUB"
+Write-Host "boot menu:"
+Write-Host "  1. Select 'Install Leap 16.0 (x86_64)' (the DEFAULT entry, not"
+Write-Host "     'Failsafe') and press 'e' to edit it"
+Write-Host "  2. Arrow down to the 'linux (...)' line, then press End"
+Write-Host "  3. In the VM Connection window's menu bar: Clipboard >"
+Write-Host "     Type Clipboard Text  (do NOT use Ctrl+V - it won't work here)"
+Write-Host "  4. Press Ctrl-X (or F10) to boot"
 Write-Host ""
-Write-Host "Then run 05-wait-for-ssh.ps1 to know when each VM is ready to SSH into."
+Write-Host "The pasted text is identical for all 3 VMs - each VM's own OEMDRV"
+Write-Host "disc supplies its own profile.json automatically."
+Write-Host ""
+Write-Host "Then run 04-wait-for-ssh.ps1 to know when each VM is ready to SSH into."

@@ -172,4 +172,4 @@ if ($RemoveNetwork)
 }
 
 Write-Host ""
-Write-Host "Done. Re-run 00-create-network.ps1 through 05-wait-for-ssh.ps1 for a fresh install."
+Write-Host "Done. Re-run 00-create-network.ps1 through 04-wait-for-ssh.ps1 for a fresh install."

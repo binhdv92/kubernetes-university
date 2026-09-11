@@ -9,9 +9,9 @@
     "hashedPassword": false,
     "password": "linux"
   },
-  "l10n": {
-    "locale": "en_US.UTF-8",
-    "keymap": "us",
+  "localization": {
+    "language": "en_US.UTF-8",
+    "keyboard": "us",
     "timezone": "America/Detroit"
   },
   "hostname": {
@@ -61,7 +61,7 @@
       {
         "name": "post-install.sh",
         "chroot": true,
-        "content": "#!/bin/sh\ncat >> /etc/hosts <<'EOF'\n\n# rke201-lab cluster\n# IP_ADDRESS FQDN SHORT_NAME\n172.30.170.2 \tmanagement.example.com\t\tmanagement\n172.30.170.3 \tserver.example.com\t\t\tserver\n172.30.170.4\tagent.example.com \t\t\tagent\nEOF\n\nsystemctl enable sshd\nsystemctl set-default graphical.target\n\nmkdir -p /etc/sudoers.d\necho '%wheel ALL=(ALL) ALL' > /etc/sudoers.d/wheel\nchmod 440 /etc/sudoers.d/wheel\n"
+        "content": "#!/bin/sh\n# Agama's \"hostname\"/\"localization\" profile properties aren't reliably\n# applied by this installed Agama version (confirmed: hostname stayed blank,\n# timezone stayed at the Europe/Berlin default) - set them directly instead,\n# writing the config files systemd reads at boot rather than using\n# hostnamectl/localectl, which need a running systemd/D-Bus not available\n# inside this chroot.\necho \"management\" > /etc/hostname\nln -sf /usr/share/zoneinfo/America/Detroit /etc/localtime\necho \"LANG=en_US.UTF-8\" > /etc/locale.conf\necho \"KEYMAP=us\" > /etc/vconsole.conf\n\ncat >> /etc/hosts <<'EOF'\n\n# rke201-lab cluster\n# IP_ADDRESS FQDN SHORT_NAME\n172.30.170.2 \tmanagement.example.com\t\tmanagement\n172.30.170.3 \tserver.example.com\t\t\tserver\n172.30.170.4\tagent.example.com \t\t\tagent\nEOF\n\nsystemctl enable sshd\nsystemctl set-default graphical.target\n\nmkdir -p /etc/sudoers.d\necho '%wheel ALL=(ALL) ALL' > /etc/sudoers.d/wheel\nchmod 440 /etc/sudoers.d/wheel\n"
       }
     ]
   }
