@@ -1,6 +1,6 @@
 # rke201v2-lab: Unattended VM Provisioning (Agama)
 
-This folder is a **fully self-contained** alternative to [../README.MD](../README.MD):
+This folder is a **fully self-contained** alternative to [../manual/README.MD](../manual/README.MD):
 it goes from a bare Hyper-V host to 3 running, SSH-ready VMs with no manual OS
 install wizard and no manual hostname/static-IP/SSH setup - just one short
 keystroke per VM at boot (see "How it works" below). It has **no runtime
@@ -62,7 +62,8 @@ automation/
     ├── 01-add-hosts-entries.ps1     # Windows hosts-file entries (standalone, idempotent)
     ├── 02-build-oemdrv-isos.ps1     # builds the 3 OEMDRV ISOs from the profiles above
     ├── 03-create-vms-unattended.ps1 # creates the VMs and boots them toward the unattended install
-    └── 04-wait-for-ssh.ps1          # polls port 22 on all 3 IPs so you know when it's done
+    ├── 04-wait-for-ssh.ps1          # polls port 22 on all 3 IPs so you know when it's done
+    └── 99-uninstall.ps1             # tears down what 00-04 created, for a fresh rebuild
 ```
 
 `00-create-network.ps1` and `01-add-hosts-entries.ps1` are standalone copies
@@ -115,6 +116,26 @@ recreating or destroying anything.
 
 Full install time depends on host resources; budget 15-30 minutes per VM after
 the boot-parameter step.
+
+## Uninstall / start fresh
+
+`99-uninstall.ps1` reverses what `00`-`04` created, so you can rebuild from
+scratch:
+
+```ps1
+.\99-uninstall.ps1
+```
+
+By default this removes the 3 VMs (stopping them first if running), their
+files under `C:\HyperV\<name>`, and the generated OEMDRV ISOs - it asks for
+confirmation first, or pass `-Force` to skip that. It leaves the Hyper-V
+switch/NAT and Windows hosts-file entries alone by default, since those can be
+shared with other VMs or the manual lab method:
+
+```ps1
+.\99-uninstall.ps1 -RemoveHostsEntries   # also remove the rke201-lab hosts block
+.\99-uninstall.ps1 -RemoveNetwork        # also remove the switch/NAT (WARNING: shared - only if nothing else uses them)
+```
 
 ## Verification
 
