@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-hostname-registry
+  namespace: sample-apps
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: fastapi-hostname-registry
+  template:
+    metadata:
+      labels:
+        app: fastapi-hostname-registry
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: fastapi-hostname-registry
+      containers:
+        - name: fastapi-hostname-registry
+          image: rancher-mes.firstsolar.com/fastapi-hostname-registry:1.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-hostname-registry
+  namespace: sample-apps
+spec:
+  type: NodePort
+  selector:
+    app: fastapi-hostname-registry
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30091

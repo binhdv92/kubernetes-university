@@ -1,0 +1,101 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: fastapi-hostname-strip-prefix
+  namespace: sample-apps
+spec:
+  stripPrefix:
+    prefixes:
+      - /fastapi-hostname
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fastapi-hostname-path
+  namespace: sample-apps
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: sample-apps-fastapi-hostname-strip-prefix@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: k3s-master1
+      http:
+        paths:
+          - path: /fastapi-hostname
+            pathType: Prefix
+            backend:
+              service:
+                name: fastapi-hostname
+                port:
+                  number: 8000
+    - host: rancher-mes.firstsolar.com
+      http:
+        paths:
+          - path: /fastapi-hostname
+            pathType: Prefix
+            backend:
+              service:
+                name: fastapi-hostname
+                port:
+                  number: 8000
+    - host: fs-25007.fs.local
+      http:
+        paths:
+          - path: /fastapi-hostname
+            pathType: Prefix
+            backend:
+              service:
+                name: fastapi-hostname
+                port:
+                  number: 8000
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: fastapi-hostname-registry-strip-prefix
+  namespace: sample-apps
+spec:
+  stripPrefix:
+    prefixes:
+      - /fastapi-hostname-registry
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fastapi-hostname-registry-path
+  namespace: sample-apps
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: sample-apps-fastapi-hostname-registry-strip-prefix@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: k3s-master1
+      http:
+        paths:
+          - path: /fastapi-hostname-registry
+            pathType: Prefix
+            backend:
+              service:
+                name: fastapi-hostname-registry
+                port:
+                  number: 8000
+    - host: rancher-mes.firstsolar.com
+      http:
+        paths:
+          - path: /fastapi-hostname-registry
+            pathType: Prefix
+            backend:
+              service:
+                name: fastapi-hostname-registry
+                port:
+                  number: 8000
+    - host: fs-25007.fs.local
+      http:
+        paths:
+          - path: /fastapi-hostname-registry
+            pathType: Prefix
+            backend:
+              service:
+                name: fastapi-hostname-registry
+                port:
+                  number: 8000

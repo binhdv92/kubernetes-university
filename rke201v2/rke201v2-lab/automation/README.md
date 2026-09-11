@@ -1,0 +1,297 @@
+# rke201v2-lab: Unattended VM Provisioning (Agama)
+
+This folder is a **fully self-contained** alternative to [../manual/README.MD](../manual/README.MD):
+it goes from a bare Hyper-V host to 3 running, SSH-ready VMs with no manual
+OS install wizard and no manual hostname/static-IP/SSH setup - just one short
+manual step per VM at boot (see "How it works" below). It has **no runtime
+dependency** on the main `manual/README.MD` or `../scripts/` - everything it
+needs lives in this folder. The main README is left untouched and still
+documents the manual, learn-by-doing path; use this folder when you just want
+the 3 VMs rebuilt quickly.
+
+## How it works
+
+openSUSE Leap 16.0 uses **Agama**, SUSE's newer installer (it replaced the
+classic YaST/AutoYaST installer used by earlier Leap releases). Agama reads a
+native **JSON profile** describing the whole install - partitioning, network,
+users, software, post-install scripts - and applies it non-interactively.
+
+Agama has **no auto-detection of a labeled volume** - it must always be told
+where the profile is via an `inst.auto=` kernel boot parameter, typed in at
+the GRUB boot menu:
+
+1. Each VM gets two virtual DVD drives: the **real, unmodified** Leap 16.0
+   installer ISO (boot device) and a small generated ISO labeled `OEMDRV`
+   containing that VM's `profile.json`.
+2. `03-create-vms-unattended.ps1` creates the VMs, starts them, and puts the
+   exact boot parameter text on your clipboard.
+3. For each VM, at the GRUB boot menu: select **`Install Leap 16.0 (x86_64)`**
+   (the default entry, not "Failsafe"), press **`e`** to edit it, arrow down
+   to the `linux (...)` line, press **`End`**, then use the VM Connection
+   window's **`Clipboard > Type Clipboard Text`** menu item (not Ctrl+V -
+   that doesn't work this early in boot) to paste:
+   ```
+   inst.auto=label://OEMDRV/profile.json rd.neednet=0 inst.install=1
+   ```
+   then press **`Ctrl-X`** (or **`F10`**) to boot.
+4. From that point on, the install is fully unattended: partitioning,
+   network, user/SSH setup, and the post-install script all happen
+   automatically, ending in a ready-to-SSH machine. Verified working
+   end-to-end on `RKE201-server` (correct hostname, static IP, `/etc/hosts`).
+
+**Why `rd.neednet=0` is required:** dracut (the Linux initrd) waits for
+networking to come up whenever `inst.auto=` is present, regardless of the
+actual location scheme used - ours (`label://`) needs no network at all, but
+dracut can't know that in advance. This Hyper-V internal network has no DHCP
+server, so without `rd.neednet=0` the boot hangs indefinitely at
+`/dev/mapper/live-rw` waiting for a network that will never come up.
+`rd.neednet=0` tells dracut explicitly not to wait.
+
+**Why `inst.install=1` is required:** Agama's own docs say installation
+starts automatically once the profile is read, and only `inst.install=0`
+should pause it for manual review - but on this specific installed Agama
+build, installation stopped at a manual "Install" confirmation button
+regardless, unless `inst.install=1` was explicitly set. Likely a
+version-specific default mismatch (see the `l10n`/`hostname` note below for
+the general pattern) rather than documented behavior.
+
+**Note on `hostname`/`localization` profile properties:** this installed
+Agama version does not reliably apply the profile's `hostname` or
+`localization` sections (confirmed: hostname stayed blank, timezone fell back
+to Agama's own `Europe/Berlin` default, in the installer's own review
+screens). Rather than chase the exact property names/shapes this specific
+build expects, each profile's post-install script sets these directly instead
+(`/etc/hostname`, `/etc/localtime`, `/etc/locale.conf`, `/etc/vconsole.conf`)
+- a mechanism already proven reliable for `/etc/hosts`/sshd/sudoers. The
+`hostname`/`localization` profile sections are left in place regardless (in
+case a future Agama update on this media starts honoring them too), but don't
+rely on them.
+
+**Why a rebuilt/patched ISO is deliberately *not* used:** an earlier version
+of this automation rebuilt the installer ISO with `oscdimg` to bake the boot
+parameter in automatically (avoiding the manual step above). That approach
+was abandoned after multiple low-level ISO/filesystem bugs (documented in
+Troubleshooting below, for anyone tempted to revisit it) - the manual step is
+simpler and, empirically, more reliable.
+
+**The installer ISO must be a local path on the Hyper-V host**, e.g.
+`C:\HyperV\iso\Leap-16.0-offline-installer-x86_64.install.iso` (set at the top
+of `03-create-vms-unattended.ps1`) - copy the ISO there before running it.
+Hyper-V's VM Management Service runs as a machine identity, not your own
+user, and generally **cannot authenticate to a remote SMB share** even when
+your own interactive session can reach it fine; pointing `Add-VMDvdDrive` at
+a UNC path like `\\fileserver\share\...` fails with `Logon failure: the user
+has not been granted the requested logon type at this computer`. **This path
+is environment-specific** - if you run this on a different server or a
+different Hyper-V host, update `$InstallerIsoPath` in
+`03-create-vms-unattended.ps1` (and the note here) to wherever the ISO
+actually lives locally on *that* machine.
+
+## Layout
+
+```
+automation/
+├── agama/
+│   ├── management.json  # RKE201-management: 2 vCPU/2GB, 40GB+10GB disks, desktop pattern
+│   ├── server.json       # RKE201-server:      2 vCPU/6GB, 40GB disk, headless
+│   └── agent.json        # RKE201-agent:       2 vCPU/6GB, 40GB disk, headless
+├── oemdrv-iso/            # generated by 02-build-oemdrv-isos.ps1 (git-ignored, not checked in)
+└── scripts/
+    ├── 00-create-network.ps1        # Hyper-V Internal switch + NAT (standalone copy)
+    ├── 01-add-hosts-entries.ps1     # Windows hosts-file entries (standalone, idempotent)
+    ├── 02-build-oemdrv-isos.ps1     # builds the 3 OEMDRV ISOs from the profiles above (needs oscdimg)
+    ├── 03-create-vms-unattended.ps1 # creates the VMs, boots them, sets the clipboard boot-parameter text
+    ├── 04-wait-for-ssh.ps1          # polls port 22 on all 3 IPs so you know when it's done
+    └── 99-uninstall.ps1             # tears down what 00-04 created, for a fresh rebuild
+```
+
+`00-create-network.ps1` and `01-add-hosts-entries.ps1` are standalone copies
+of the same steps the main README documents (`../scripts/00-create-network.ps1`
+and README Phase 0.0, respectively) - duplicated here on purpose so this
+folder never has to reach outside itself. If the network/DNS design ever
+changes, remember to update both copies.
+
+`02-build-oemdrv-isos.ps1` needs `oscdimg.exe`, from the Windows ADK's
+"Deployment Tools" feature (a small, official Microsoft download). If you
+don't have it:
+1. Download the ADK installer from https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install
+2. Run it and select only the **Deployment Tools** feature (or, from an
+   elevated prompt: `adksetup.exe /quiet /features OptionId.DeploymentTools`)
+3. `oscdimg.exe` will then be under
+   `C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\`
+   (where the script looks for it automatically)
+
+Each Agama profile configures the same things the main README's Phase 0.0-0.3
+walk through by hand:
+- Partitioning (guided/automatic proposal; management additionally gets its
+  second 10GB disk formatted ext4 and mounted at `/data/nfs-share` - actually
+  exporting it over NFS is a later phase and is **not** automated here)
+- Static IP, gateway, DNS (`8.8.8.8`/`8.8.4.4`, same as `../scripts/03-change-ip-address.sh`), hostname/FQDN
+- Timezone `America/Detroit` (applied to all 3 VMs for consistency; the main README only states this for `server` today)
+- The shared lab account (`tux` / `linux`, full name `Tux Penguins`, sudo via `wheel`) plus a `root` account with the same password
+- OpenSSH installed and enabled
+- The same `/etc/hosts` block as the main README, written on every VM
+- No product registration (offline install) and `questions.policy: "auto"` to auto-answer any other interactive prompts (e.g. GPG import) that could otherwise block unattended install
+
+**Note on the shared password:** `tux`/`linux` is already the published,
+shared lab credential in the main README - embedding it in these profiles
+doesn't introduce a new secret, it's the same one, and this is an isolated
+lab network with no internet-facing exposure.
+
+**Note on how a VM knows which profile is "its" profile:** every OEMDRV disc
+contains a file with the same generic name (`profile.json`), but each VM gets
+its *own*, separately-built OEMDRV ISO (`management-oemdrv.iso`,
+`server-oemdrv.iso`, `agent-oemdrv.iso`) with different content. The mapping
+happens entirely in `03-create-vms-unattended.ps1`, which attaches the
+matching role-specific ISO to each VM - Agama itself has no notion of "server
+vs. agent," it just reads whatever `profile.json` happens to be on the one
+OEMDRV disc that VM has attached.
+
+## Usage
+
+From an elevated PowerShell prompt on the Hyper-V host:
+
+```ps1
+cd automation\scripts
+
+.\00-create-network.ps1
+.\01-add-hosts-entries.ps1
+.\02-build-oemdrv-isos.ps1
+.\03-create-vms-unattended.ps1
+```
+
+`03-create-vms-unattended.ps1` prints the exact manual GRUB steps (see "How
+it works") and puts the boot parameter text on your clipboard automatically -
+connect to each VM's console in Hyper-V Manager and perform that step for
+each of the 3 VMs before walking away. Then:
+
+```ps1
+.\04-wait-for-ssh.ps1
+```
+
+Every script is idempotent - re-running any of them skips work that's already
+done (existing switch/NAT, existing hosts entries, existing ISOs, existing
+VMs) rather than recreating or destroying anything.
+
+Full install time depends on host resources; budget 15-30 minutes per VM
+after the boot-parameter step.
+
+## Uninstall / start fresh
+
+`99-uninstall.ps1` reverses what `00`-`03` created, so you can rebuild from
+scratch:
+
+```ps1
+.\99-uninstall.ps1
+```
+
+By default this removes the 3 VMs (stopping them first if running), their
+files under `C:\HyperV\<name>`, and the generated OEMDRV ISOs - it asks for
+confirmation first, or pass `-Force` to skip that. It leaves the Hyper-V
+switch/NAT and Windows hosts-file entries alone by default, since those can be
+shared with other VMs or the manual lab method:
+
+```ps1
+.\99-uninstall.ps1 -RemoveHostsEntries   # also remove the rke201-lab hosts block
+.\99-uninstall.ps1 -RemoveNetwork        # also remove the switch/NAT (WARNING: shared - only if nothing else uses them)
+```
+
+## Verification
+
+Once `04-wait-for-ssh.ps1` reports all 3 reachable:
+
+```ps1
+Get-VM
+
+ssh tux@management
+ssh tux@server
+ssh tux@agent
+```
+
+On each VM, the same checks the main README documents should now already pass:
+```bash
+hostnamectl
+cat /etc/hosts
+ip address show
+systemctl status sshd
+```
+
+## Troubleshooting / things to double-check on first run
+
+- **Disk device names**: profiles assume `/dev/sda` (and `/dev/sdb` for
+  management's second disk), which is standard for Hyper-V Gen2 synthetic
+  SCSI disks under Linux. If the installer proposal fails, check the actual
+  device name in the installer's log/console.
+- **Desktop pattern name** (`management.json` only): assumes `gnome` + `x11`
+  patterns exist in the Leap 16.0 offline repo. If the install fails on
+  software selection, run `zypper patterns` against the ISO's repo and adjust
+  the `"patterns"` list in `management.json`.
+- **`oscdimg.exe` not found**: install the Windows ADK "Deployment Tools"
+  feature (see "Layout" above) and re-run `02-build-oemdrv-isos.ps1`.
+- **"Configuration unreachable or invalid" / "File not found /profile.json"
+  in the Agama wizard**: means the OEMDRV disc has the file under a mangled
+  name instead of literally `profile.json` - Agama's `label://` reader does
+  not fall back to Joliet the way GRUB/the Linux kernel's iso9660 driver do.
+  `02-build-oemdrv-isos.ps1` already builds with oscdimg's `-n -d` (long +
+  lowercase names directly in the primary ISO9660 tree) to avoid this; if you
+  see this error, verify the OEMDRV ISO wasn't rebuilt some other way -
+  inspect it with `7z l <iso> -slt` and confirm `profile.json` appears
+  correctly (not as something like `PROFIL~1.JSO;1`).
+- **Boot hangs at `/dev/mapper/live-rw` ("A start job is running...")**:
+  you're missing `rd.neednet=0` from the boot parameter, or mistyped it. This
+  is dracut waiting for network that will never come up on this isolated,
+  DHCP-less internal switch. Reset the VM and redo the GRUB edit, double
+  -checking the full pasted text reads
+  `inst.auto=label://OEMDRV/profile.json rd.neednet=0 inst.install=1`.
+- **Agama loads the profile but stops at a manual "Install" confirmation
+  button**: missing `inst.install=1` from the boot parameter. Agama's docs say
+  installation should start automatically by default, but this installed
+  build needs it stated explicitly.
+- **Install still shows the interactive wizard instead of proceeding
+  unattended**: the `inst.auto=` parameter wasn't applied - most likely you
+  edited the wrong GRUB entry (must be `"Install Leap 16.0 (x86_64)"`, not
+  "Failsafe"), or the pasted text didn't land at the very end of the `linux
+  (...)` line. Reset and redo the edit carefully; double-check with the
+  on-screen edit box that the full line reads `...splash=silent
+  inst.auto=label://OEMDRV/profile.json rd.neednet=0 inst.install=1` (it will
+  likely wrap visually across two rows in the edit box - that's just display
+  wrapping, not a real line break).
+- **"No operating system was loaded" on first boot**: means the installer DVD
+  never actually attached. Check with `Get-VMDvdDrive -VMName <name>` - if only
+  the `*-oemdrv.iso` shows up and the installer ISO is missing, the VM is
+  stuck with a non-bootable disc as its boot device. The most common cause is
+  `$InstallerIsoPath` pointing at a remote UNC share - Hyper-V's VM Management
+  Service can't authenticate to it (`Logon failure: the user has not been
+  granted the requested logon type at this computer`), so `Add-VMDvdDrive`
+  fails even though the path is reachable from your own interactive session.
+  `03-create-vms-unattended.ps1` fails loudly instead of continuing when this
+  happens; if you already hit it, remove the affected VM(s) and their
+  `C:\HyperV\<name>` folder, then re-run `03-create-vms-unattended.ps1`.
+
+### Dead end: rebuilding the installer ISO (do not revisit without new information)
+
+An earlier version of this automation rebuilt the ~4.5GB installer ISO with
+`oscdimg` to bake `inst.auto=label://OEMDRV/profile.json` directly into its
+default GRUB entry, avoiding the manual boot step entirely. It was abandoned
+after three compounding, low-level bugs were found and fixed one at a time
+(each costing a full VM-boot cycle to diagnose), and a fourth issue (the
+`rd.neednet=0`/network-wait problem, described above) turned out to have
+*nothing* to do with the rebuild - it reproduced identically on the real,
+unmodified vendor ISO. In hindsight, none of the ISO-rebuild engineering was
+actually necessary. For reference, in case this is ever revisited:
+- `oscdimg -u2 -udfver102` (UDF as the primary filesystem) left the ISO9660
+  fallback view 8.3-mangled (oscdimg can't produce Rock Ridge, unlike the
+  vendor's own Linux-based mastering tool), and GRUB couldn't find
+  `/boot/0xc28b255e` or `/boot/grub2/grub.cfg` by their real names - fixed by
+  switching to `-n -d` (long + lowercase names directly in the primary
+  ISO9660 tree).
+- Windows' `Get-Volume`/WMI truncates ISO9660 volume labels to 16 characters,
+  and `oscdimg` additionally force-uppercases whatever label it's given -
+  dracut's live-root label match is exact-case, so both had to be corrected
+  (read the real label directly from the ISO9660 Primary Volume Descriptor,
+  then patch the built ISO's label field back to the real mixed case
+  afterward).
+- After both of those fixes, the rebuilt ISO was byte-for-byte verified
+  correct (matching file hashes, correct names, correct label) and *still*
+  didn't fully resolve things, because the real, fourth issue was the
+  network-wait problem above, unrelated to the rebuild.
