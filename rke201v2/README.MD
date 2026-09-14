@@ -142,8 +142,9 @@ kubectl describe node <node-name from kubectl get nodes> | grep -A 3 "rke2.io/no
 kubectl describe node server | grep -A 3 "rke2.io/node-args"
 ```
 
-## 5. Files & symlinks summary
+## 5. Lesson Learned
 
+### 5.1. Symlink `/usr/local/bin/kubectl` where possible, copy only where you must
 Config/kubeconfig files under `/etc/rancher/rke2/`:
 
 | File | server | agent | management | Why |
@@ -166,6 +167,7 @@ What `/usr/local/bin/kubectl` should be on each node:
 | agent | symlink → `/var/lib/rancher/rke2/bin/kubectl` | Same reasoning as server — keep it a symlink, not a copy. |
 | management | real copied file | No local RKE2 install to link to — copying is the only option here. |
 
+### 5.2. `~/.kube/config` follows the same rule
 What `~/.kube/config` should be on each node:
 
 | Node | Ideal | Notes |
@@ -174,4 +176,19 @@ What `~/.kube/config` should be on each node:
 | agent | real copied file (from server, `server:` field edited to the real IP) | No local kubeconfig is ever generated on an agent — nothing to link to. |
 | management | same as agent — real copied file | Same reasoning as agent. |
 
-**The one rule that explains all of it:** you can only symlink to something generated *locally, live, on that same machine*. That only happens on the server (the only node running `kube-apiserver`, and the only one RKE2 auto-generates a kubeconfig for). Everywhere else, a real copied file is the correct answer, not a workaround — just remember copies are static snapshots that need re-copying if the server's credentials ever rotate.
+**The one rule that explains both 5.1 and 5.2:** you can only symlink to something generated *locally, live, on that same machine*. That only happens on the server (the only node running `kube-apiserver`, and the only one RKE2 auto-generates a kubeconfig for). Everywhere else, a real copied file is the correct answer, not a workaround — just remember copies are static snapshots that need re-copying if the server's credentials ever rotate.
+
+### 5.3. RKE2 only supports `ingress-nginx`, never Traefik
+Traefik is k3s's default. Setting `ingress-controller: traefik` in `config.yaml` crash-loops the server with a hard `fatal` error on startup.
+
+### 5.4. `firewalld` blocks the Kubernetes API by default on SUSE
+`kubectl` works locally on `server` (loopback bypasses the firewall) but fails from every other host until you `firewall-cmd --zone=trusted --add-source=...` the node, pod, and service CIDRs.
+
+### 5.5. A local lab subnet can collide with a corporate VPN's split-tunnel routes
+Our `172.30.170.0/24` Hyper-V network happened to match a real internal range on First Solar's network, so GlobalProtect silently hijacked traffic to it whenever the VPN was connected. Diagnosed via TTL/round-trip-time clues and `route print`/`Get-NetRoute`; fixed by disconnecting the VPN, winning the route-metric tie-break, or renumbering the lab network.
+
+### 5.6. `ROLES` in `kubectl get nodes` is just labels, not ground truth
+A production node labeled `postgres` was still a plain worker underneath. The `rke2.io/node-args` node annotation (literally `["server",...]` or `["agent",...]`) is the authoritative way to tell server vs. agent.
+
+### 5.7. Small typos cause big, confusing failures
+A missing `2` in `INSTALL_RKE_TYPE`, an auto-"smart-quoted" en dash instead of `--`, and `ls -s` instead of `ln -s` each silently broke a step without an obvious error message pointing at the real cause.
