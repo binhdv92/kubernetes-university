@@ -4,6 +4,14 @@
 Before installing RKE2 itself, the 3-VM cluster (`management`, `server`, `agent`) must already exist, be networked (`172.30.170.0/24`), and be SSH-reachable. Pick one of the two paths below to get there:
 - [`rke201v2-lab/manual/README.MD`](rke201v2-lab/manual/README.MD) — the primary, learn-by-doing path: create the Hyper-V network, create the VMs, install the OS by hand through the installer wizard, set static IPs, enable SSH.
 - [`rke201v2-lab/semi-automation/README.md`](rke201v2-lab/semi-automation/README.md) — a faster, scripted alternative (Agama JSON profiles + OEMDRV ISOs) that gets all 3 VMs to a ready-to-SSH state with only one manual GRUB boot-parameter step per VM.
+### Cluster configuration overview
+Shared account on every VM: fullname `Tux Penguins`, username `tux`, password `linux`.
+
+| VM | vCPU | RAM | Disk | OS | IP | Hostname |
+|---|---|---|---|---|---|---|
+| `rke201-management` | 2 | 2GB | 40GB + 10GB (NFS share) | openSUSE Leap 16.0 | 172.30.170.2 | `management.example.com` |
+| `rke201-server` | 2 | 6GB | 40GB | openSUSE Leap 16.0 | 172.30.170.3 | `server.example.com` |
+| `rke201-agent` | 2 | 6GB | 40GB | openSUSE Leap 16.0 | 172.30.170.4 | `agent.example.com` |
 
 ## 1. `server.example.com`
 

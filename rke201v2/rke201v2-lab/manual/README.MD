@@ -2,8 +2,18 @@
 - This project is aim to setup a group of rke2 clusters named `rke201v2-lab`.
 
 # Lab Environment Overview
+
+## Overview of Steps
+This guide builds the 3-VM `rke201v2-lab` cluster entirely by hand, in this order:
+1. **Phase 0.0** — Add DNS entries for the 3 VMs to the Windows host's `hosts` file.
+2. **Phase 0.1** — Create an isolated Hyper-V internal network + NAT for the lab.
+3. **Phase 0.2** — Create the 3 VMs (Generation 2, Secure Boot configured) on that network.
+4. **Phase 0.3** — Install openSUSE Leap 16.0 on each VM, then set hostname, static IP, and OpenSSH so every VM is reachable by SSH from the Windows host.
+
+Once all 3 VMs are up and SSH-reachable, the cluster is ready for RKE2 installation — see [Next Steps](#next-steps) at the end of this guide.
+
 ## Lab Environment Information
-This lab environment consists of two virtual linux machines running on an isolated network:
+This lab environment consists of three virtual Linux machines running on an isolated network:
 - Lab name: `rke201v2-lab`
 - **RKE201-management**: This virtual machine (VM) provides services required for the Lab environment, such as DNS, NFS, and NTP. It is used as the entry point for the other VMs by providing a GUI.
     - 2vCPUs
@@ -15,7 +25,7 @@ This lab environment consists of two virtual linux machines running on an isolat
     - IP address: 172.30.170.2
     - Hostname: management.example.com
     - Iso file: \\fs-22175.fs.local\d$\ISO\Leap-16.0-offline-installer-x86_64.install.iso
-- **RKE201-server**: The RKE2 server (control-plan) node.
+- **RKE201-server**: The RKE2 server (control-plane) node.
     - 2vCPUs
     - 6GB RAM
     - 1 hard disk:
@@ -57,7 +67,7 @@ The rke201v2-lab environment has been tested on a host:
 
 ## Network:
 - SwitchName: `rke201-network`, internal isolated network.
-- NAT Network Name: `rke201-nat-network` (acess)
+- NAT Network Name: `rke201-nat-network` (access)
 - Isolated network 
 - DHCP service is enabled and provided by the management VM. 
 - DNS service is enabled and provided by the management VM. 
@@ -84,13 +94,16 @@ ping server.example.com
 
 ping agent
 ping agent.example.com
+
+ping management
+ping management.example.com
 ```
 
 You can also verify DNS resolution without pinging:
 ```ps1
 Resolve-DnsName server
 Resolve-DnsName server.example.com
-
+Resolve-DnsName management
 ```
 
 ## Phase 0.1: Create Virtual Network (Windows Host machine)
@@ -210,6 +223,15 @@ $ISOPath = "\\fs-22175.fs.local\d$\ISO\Leap-16.0-offline-installer-x86_64.instal
 
 $VMs = @(
     @{
+        Name       = "RKE201-management"
+        Hostname   = "management.example.com"
+        IP         = "172.30.170.2"
+        CPU        = 2
+        MemoryGB   = 2
+        DiskGB     = 40
+        DataDiskGB = 10   # second disk, for the NFS share
+    },
+    @{
         Name     = "RKE201-server"
         Hostname = "server.example.com"
         IP       = "172.30.170.3"
@@ -288,6 +310,21 @@ foreach ($VM in $VMs)
             -EnableSecureBoot On `
             -SecureBootTemplate "MicrosoftUEFICertificateAuthority"
 
+        # Second data disk (management only - used for the NFS share)
+        if ($VM.DataDiskGB)
+        {
+            $DataVHDPath = "$VHDPath\$VMName-data.vhdx"
+
+            New-VHD `
+                -Path $DataVHDPath `
+                -SizeBytes ($VM.DataDiskGB * 1GB) `
+                -Dynamic | Out-Null
+
+            Add-VMHardDiskDrive `
+                -VMName $VMName `
+                -Path $DataVHDPath
+        }
+
         Add-VMDvdDrive `
             -VMName $VMName `
             -Path $ISOPath
@@ -352,18 +389,26 @@ output:
 ```ps1
 PS C:\repo-mes\kubernetes-university> Get-VM
 
-Name          State   CPUUsage(%) MemoryAssigned(M) Uptime           Status             Version
-----          -----   ----------- ----------------- ------           ------             -------
-opensuse-leap Off     0           0                 00:00:00         Operating normally 11.0   
-RKE201-agent  Running 0           6144              00:14:25.9710000 Operating normally 11.0   
-RKE201-server Running 0           6144              00:14:05.5100000 Operating normally 11.0   
+Name              State   CPUUsage(%) MemoryAssigned(M) Uptime           Status             Version
+----              -----   ----------- ----------------- ------           ------             -------
+RKE201-management Running 0           2048              00:14:35.1200000 Operating normally 11.0
+RKE201-agent      Running 0           6144              00:14:25.9710000 Operating normally 11.0
+RKE201-server     Running 0           6144              00:14:05.5100000 Operating normally 11.0
 
 
 PS C:\repo-mes\kubernetes-university> 
 ```
 
-## Phase 0.3: Buil the based OS VM
-### 0.3.1 Start boosting and install the based OS linux of openSUSE.
+## Phase 0.3: Build the base OS VM
+### 0.3.1 Start booting and install the base OS (openSUSE Linux)
+-  rke201-management
+    - hostname: `management`
+    - fqdn: `management.example.com`
+    - ip address: 172.30.170.2
+    - fullname: `Tux Penguins`
+    - username: `tux`
+    - password: `linux`
+    - Timezone: Americas-Detroit (America/Detroit UTC-4)
 -  rke201-server
     - hostname: `server`
     - fqdn: `server.example.com`
@@ -379,7 +424,10 @@ PS C:\repo-mes\kubernetes-university>
     - fullname: `Tux Penguins`
     - username: `tux`
     - password: `linux`
+    - Timezone: Americas-Detroit (America/Detroit UTC-4)
+
 ### 0.3.2 Validate and Check hostname
+Repeat this check on all 3 VMs (`management`, `server`, `agent`) - the example below is shown for `server`.
 1. Set and validate `hostname` and FQND full qualified domain name.
 - Check host name `> hostnamectl`
 ```bash
@@ -476,6 +524,7 @@ tux@server:~>
 
 #### Method 1: Using the Command Line (nmcli)
 - Command to change to a static IP
+- rke201-management: 172.30.170.2
 - rke201-server: 172.30.170.3
 - rke201-agent: 172.30.170.4
 ```sh
@@ -535,11 +584,13 @@ method=auto
 sudo systemctl reload NetworkManager
 ```
 
-5. Verify:
+#### Verify: confirm the new static IP took effect
+Regardless of which method above you used:
 ```bash
 ip address show
 ip a
 ```
+**What to look for:** the `inet` line under `eth0` should now show the static IP you just configured for this VM (e.g. `172.30.170.3/24` on `server`), not a DHCP-leased address.
 
 ### 0.3.4 Install and verify OpenSSH server
 needed to manage each VM remotely from the Windows host once its static IP is set — otherwise you're stuck working through the Hyper-V console window.
@@ -565,9 +616,14 @@ sudo zypper install openssh
 sudo systemctl enable --now sshd
 ```
 
-**What to look for:** A status showing Loaded: loaded... confirms the software installation. If it says Active: `active (running) since ...`, the service is currently running
+#### Verify: OpenSSH is running
+```bash
+systemctl status sshd
+```
+**What to look for:** A status showing `Loaded: loaded...` confirms the software installation. If it says `Active: active (running) since ...`, the service is currently running.
 
 ### Add all cluster nodes + hostname to `/etc/hosts`
+Repeat on all 3 VMs:
 ```ini
 # rke201-lab cluster
 # IP_ADDRESS FQDN SHORT_NAME
@@ -576,19 +632,29 @@ sudo systemctl enable --now sshd
 172.30.170.4	agent.example.com 			agent
 ```
 
-### Vefify: Checking all Linux OS setup successfully.
+#### Verify: `/etc/hosts` applied correctly
+```bash
+cat /etc/hosts
+ping -c 2 server
+ping -c 2 agent
+ping -c 2 management
+```
+
+### Verify: Checking all Linux OS setup successfully.
 from host Windows machine
 1. check DNS resolve
 ```ps1
-Resolve-Dnsname server
-Resolve-Dnsname agent
+Resolve-DnsName server
+Resolve-DnsName agent
+Resolve-DnsName management
 ```
 
 2. check ssh
 ```ps1
 ssh tux@server
 ssh tux@agent
+ssh tux@management
 ```
 
-
-
+## Next Steps
+Once all 3 VMs are confirmed up and SSH-reachable, continue to [`../../README.MD`](../../README.MD) to install and configure RKE2 itself.
