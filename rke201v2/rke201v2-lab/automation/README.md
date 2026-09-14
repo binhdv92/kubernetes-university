@@ -295,3 +295,11 @@ actually necessary. For reference, in case this is ever revisited:
   correct (matching file hashes, correct names, correct label) and *still*
   didn't fully resolve things, because the real, fourth issue was the
   network-wait problem above, unrelated to the rebuild.
+
+
+## Issue with Routing table at my home local network when connect to VPN.
+
+```bash
+Get-NetRoute -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -eq "Ethernet" } | Sort-Object DestinationPrefix | Format-Table DestinationPrefix, NextHop, RouteMetric -AutoSize
+
+```
