@@ -109,6 +109,19 @@ sudo firewall-cmd --zone=trusted --add-source=10.43.0.0/16 --permanent
 sudo firewall-cmd --reload
 ```
 
+# for `rke201-lab-mac`
+```bash
+sudo firewall-cmd --zone=trusted --add-source=192.168.64.0/24 --permanent
+sudo firewall-cmd --zone=trusted --add-source=10.42.0.0/16 --permanent
+sudo firewall-cmd --zone=trusted --add-source=10.43.0.0/16 --permanent
+sudo firewall-cmd --reload
+```
+
+**verify:** the IP addresses will appear at `source: ip1 ip2 ip3`
+```bash
+sudo firewall-cmd --zone=trusted --list-all
+```
+
 ## 3. `management.example.com` (kubectl-only client)
 `management` does not run RKE2 at all — it's just a workstation configured to run `kubectl` against the API server on `server.example.com`.
 
@@ -192,3 +205,16 @@ A production node labeled `postgres` was still a plain worker underneath. The `r
 
 ### 5.7. Small typos cause big, confusing failures
 A missing `2` in `INSTALL_RKE_TYPE`, an auto-"smart-quoted" en dash instead of `--`, and `ls -s` instead of `ln -s` each silently broke a step without an obvious error message pointing at the real cause.
+
+### 5.8 Kubernetes CLI auto-completion
+Auto-Completion for the kubectl command
+```bash
+echo 'source <(kubectl completion bash)' >>~/.bashrc
+source ~/.bashrc
+```
+
+Auto-Completion for the k alias for the kubectl command
+```bash
+echo 'alias k=kubectl' >>~/.bashrc
+echo 'complete -o default -F __start_kubectl k' >>~/.bashrc
+```
