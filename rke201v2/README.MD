@@ -218,3 +218,16 @@ Auto-Completion for the k alias for the kubectl command
 echo 'alias k=kubectl' >>~/.bashrc
 echo 'complete -o default -F __start_kubectl k' >>~/.bashrc
 ```
+
+
+### 5.8. A leaked `host-local` CNI IPAM pool leaves every new pod stuck in `ContainerCreating` forever
+Symptom: `kubectl describe pod` shows `FailedCreatePodSandBox ... plugin type="calico" failed (add): failed to allocate for range 0: no IP addresses available in range set: 10.42.1.1-10.42.1.254`.
+
+- Root cause: there are 254 IP at `/var/lib/cni/networks/k8s-pod-network/`.
+- Solution:
+```bash
+sudo bash
+cd /var/lib/cni/networks/k8s-pod-network/
+rm -rf *
+shutdown -r now
+```

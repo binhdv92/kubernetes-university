@@ -26,7 +26,7 @@
 # =====================================================================
 
 $ExternalSwitches = @(
-    @{ SwitchName = "rke201-network-wired"; PhysicalAdapterName = "Ethernet 2" }
+    @{ SwitchName = "rke201-network-wired"; PhysicalAdapterName = "Ethernet 4" }
 )
 
 foreach ($Net in $ExternalSwitches)
