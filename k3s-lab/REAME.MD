@@ -4,17 +4,17 @@
 
 # Architecture
 
-rancher url: https://rancher-mes.firstsolar.com
-user: admin
-password: rancher@12345
-
+Rancher UI:
+- url: https://rancher-mes.firstsolar.com
+- user: admin
+- password: rancher@12345
 
 ## virtual machines
 - iso: ubuntu-24.04.4-live-server-amd64.iso
 - shared account:
-    - fullname: k3sadmin
-    - username: k3sadmin
-    - password: k3sadmin@123
+    - fullname: Tux Penguins
+    - username: tux
+    - password: linux@123
 - Hyper-V VMs (12 GB of RAM, 8 CPU cores)
     k3s-master1, 4GB RAM, 4 CPUs, 40GB
         IPv4: 10.10.10.11

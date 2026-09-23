@@ -865,3 +865,28 @@ phase is only needed if the teammate must hit the endpoint from their own machin
 ---
 
 **Please review and approve before I begin execution**, or let me know what to adjust (IP assumptions, TLS/DNS phases, single vs multi-node approach, adjust worker IPs, etc.).
+
+
+## Lesson Learned
+### Change linux OS username
+Change Username
+- You cannot change a username while you are logged into that account.
+- Create a temporary administrative user by running 
+```bash 
+sudo adduser tempuser
+sudo usermod -aG sudo tempuser
+```
+
+- Log out of your current account and log in as `tempuser`
+- Open a terminal and run the `usermod` command to change the login name and home directory:
+```bash
+sudo usermod -l newname oldname
+sudo usermod -d /home/newname -m newname
+```
+- Log back into your renamed account and delete the temporary user with `sudo deluser tempuser`
+
+### Change Your Own Password
+- Open your terminal and type `passwd`.Press Enter.
+- Type your current password, then press Enter (no characters will show on the screen).
+- Type your new password and press Enter.
+- Retype your new password to confirm
