@@ -231,3 +231,12 @@ cd /var/lib/cni/networks/k8s-pod-network/
 rm -rf *
 shutdown -r now
 ```
+
+### 5.8 Install `kubens`
+```bash
+sudo git clone https://github.com/ahmetb/kubectx /opt/kubectx
+sudo ln -s /opt/kubectx/kubectx /usr/local/bin/kubectx
+sudo ln -s /opt/kubectx/kubens /usr/local/bin/kubens
+sudo chmod +x /usr/local/bin/kubectx /usr/local/bin/kubens
+
+```

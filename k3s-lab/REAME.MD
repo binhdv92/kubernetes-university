@@ -5,6 +5,8 @@
 # Architecture
 
 rancher url: https://rancher-mes.firstsolar.com
+user: admin
+password: rancher@12345
 
 
 ## virtual machines
