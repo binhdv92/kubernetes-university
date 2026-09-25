@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-nodename
+  labels:
+    run: pod-nodename
+spec:
+  nodeName: k3s-worker2
+  containers:
+  - name: pod-nodename
+    image: nginx

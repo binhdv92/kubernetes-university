@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-nodeselector
+spec:
+  containers:
+  - name: machine-learning-workload
+    image: alpine:latest
+    command: ["sh","-c", "echo 'Processing ML data'; sleep 3600"]
+  nodeSelector:
+    hardware: "gpu"
+    disktype: "ssd"
+
