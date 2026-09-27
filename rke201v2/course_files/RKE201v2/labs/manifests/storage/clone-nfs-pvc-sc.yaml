@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: clone-nfs-pvc-sc
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: sc-nfs
+  resources:
+    requests:
+      storage: 4Gi
+  dataSource:
+    name: nfs-pvc-sc
+    kind: PersistentVolumeClaim

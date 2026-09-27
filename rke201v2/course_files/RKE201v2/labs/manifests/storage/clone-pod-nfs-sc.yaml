@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: clone-pod-nfs-sc
+spec:
+  containers:
+  - name: busybox
+    image: busybox
+    command: ["sleep", "3600"]
+    volumeMounts:
+    - name: nfs-sc
+      mountPath: /data
+  volumes:
+  - name: nfs-sc
+    persistentVolumeClaim:
+      claimName: clone-nfs-pvc-sc
