@@ -1,0 +1,33 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: staticwebs.mycompany.com
+spec:
+  group: mycompany.com
+  scope: Namespaced
+  names:
+    plural: staticwebs
+    singular: staticweb
+    kind: StaticWeb
+    shortNames: ["site"]
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: ["spec"]
+          properties:
+            spec:
+              type: object
+              required: ["source-repository", "domain"]
+              properties:
+                source-repository:
+                  type: string
+                  pattern: '^git@github\.com:.*\.git$'
+                domain:
+                  type: string
+                enableSSL:
+                  type: boolean
+                  default: true

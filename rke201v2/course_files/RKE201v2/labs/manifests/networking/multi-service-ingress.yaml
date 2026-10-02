@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: multi-service-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: default-clean-route@kubernetescrd
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /serviceA
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx-service
+            port:
+              number: 80
+      - path: /serviceB
+        pathType: Prefix
+        backend:
+          service:
+            name: apache-service
+            port:
+              number: 80

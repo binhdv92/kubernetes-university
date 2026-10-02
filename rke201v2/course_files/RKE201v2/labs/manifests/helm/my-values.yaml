@@ -1,0 +1,13 @@
+controller:
+  ingress:
+    enabled: true
+    path: /
+    hostName: "k3s-master1"
+  #installPlugins:
+  #  - kubernetes:4419.v36079e3b_eb_5b_
+  #  - workflow-aggregator:608.v67378e9d3db_1
+  #  - git:5.8.1
+  #  - configuration-as-code:2036.v0b_c2de701dcb_   # bumped from 2031 to satisfy git-client 6.6.1
+persistence:
+  enabled: false
+

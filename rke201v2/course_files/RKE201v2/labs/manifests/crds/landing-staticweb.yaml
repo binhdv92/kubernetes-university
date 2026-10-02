@@ -1,0 +1,9 @@
+apiVersion: mycompany.com/v1
+kind: StaticWeb
+metadata:
+  name: landing-page
+  namespace: landing
+spec:
+  source-repository: "git@github.com:mycompany/landing-page.git"
+  domain: "www.mycompany.com"
+  enableSSL: true
