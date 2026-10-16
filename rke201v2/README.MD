@@ -26,13 +26,8 @@ sudo INSTALL_RKE2_TYPE=server INSTALL_RKE2_CHANNEL=v1.28 ./install.sh
 ```
 
 ### 1.2. Setting configuration and start the service
-Setting configuration parameters for rke2 before first start.
-- Create `/etc/rancher/rke2` on `server.example.com`
-```bash
-sudo mkdir -p /etc/rancher/rke2
-```
+- Setting configuration parameters for rke2 before first start.
 - Create `/etc/rancher/rke2/config.yaml` on `server.example.com`. This will help to set the alternative name of the node in the cluster:
-- `sudo vim /etc/rancher/rke2/config.yaml` and paste the below yaml file.
 
 ```yaml
 token: kubeadmincourse # token required for other node/agent to join the cluster.
@@ -74,46 +69,7 @@ sudo chown $(id -u):$(id -g) /etc/rancher/rke2/rke2.yaml
 This makes `kubectl` available in every new shell/login without needing to `export PATH` or `export KUBECONFIG` each time. Verify with:
 ```bash
 kubectl get nodes
-kubectl get nodes -o wide
 ```
-```bash
-tux@server:~> kubectl get nodes
-NAME     STATUS   ROLES                AGE    VERSION
-server   Ready    control-plane,etcd   103m   v1.36.5+rke2r1
-tux@server:~> kubectl get nodes -o wide
-NAME     STATUS   ROLES                AGE    VERSION          INTERNAL-IP    EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION                     CONTAINER-RUNTIME
-server   Ready    control-plane,etcd   104m   v1.36.5+rke2r1   172.30.170.3   <none>        openSUSE Leap 16.0   6.12.0-160000.35-default (amd64)   containerd://2.3.4-k3s1
-tux@server:~> 
-```
-
-**Test the first pod**
-- Create an nginx pod.
-```bash
-kubectl run nginx --image=nginx
-```
-- Validate
-```
-kubectl get pod -o wide
-sudo ls /var/lib/cni/networks/k8s-pod-network -l
-```
-output:
-```bash
-tux@server:~> kubectl get pod -o wide
-NAME    READY   STATUS    RESTARTS   AGE     IP           NODE     NOMINATED NODE   READINESS GATES
-nginx   1/1     Running   0          3m43s   10.42.0.14   server   <none>           <none>
-tux@server:~> sudo ls /var/lib/cni/networks/k8s-pod-network -l
-total 28
--rw-------. 1 root root 70 Oct 15 12:48 10.42.0.10
--rw-------. 1 root root 70 Oct 15 12:48 10.42.0.12
--rw-------. 1 root root 70 Oct 15 14:33 10.42.0.14
--rw-------. 1 root root 70 Oct 15 12:47 10.42.0.3
--rw-------. 1 root root 70 Oct 15 12:48 10.42.0.8
--rw-------. 1 root root 70 Oct 15 12:48 10.42.0.9
--rw-------. 1 root root 10 Oct 15 14:33 last_reserved_ip.0
--rwxr-x---. 1 root root  0 Oct 15 12:47 lock
-tux@server:~> 
-```
-
 
 ### 1.5. Grab the join token for the agent
 ```bash
@@ -133,12 +89,7 @@ sudo INSTALL_RKE2_TYPE=agent INSTALL_RKE2_CHANNEL=v1.28 ./install.sh
 ```
 
 ### 2.2. Setting configuration for `agent` node and join to `server`
-- Create `/etc/rancher/rke2` folder on `agent.example.com`
-```bash
-sudo mkdir -p /etc/rancher/rke2
-```
-- Create `/etc/rancher/rke2/config.yaml` on `agent.example.com`.
-- `sudo vim /etc/rancher/rke2/config.yaml` and paste the below yaml file.
+1. on `agent.example.com`, create `/etc/rancher/rke2/config.yaml` with below content (different from `server` node).
 ```yaml
 server: https://172.30.170.3:9345 # this is server.example.com IP address
 token: kubeadmincourse
@@ -147,47 +98,15 @@ token: kubeadmincourse
 ```bash
 sudo systemctl enable --now rke2-agent.service
 ```
-**verify**: `sudo systemctl status rke2-agent.service`. the output should show `Active: active (running) since ***`.
-output:
-```bash
-tux@agent:~> sudo systemctl status rke2-agent.service
-● rke2-agent.service - Rancher Kubernetes Engine v2 (agent)
-     Loaded: loaded (/etc/systemd/system/rke2-agent.service; enabled; preset: disabled)
-     Active: active (running) since Thu 2026-10-15 15:05:37 EDT; 1min 13s ago
- Invocation: d40fc28afe03451db52a95d2fc6d193c
-       Docs: https://github.com/rancher/rke2#readme
-    Process: 2488 ExecCondition=/bin/sh -c if systemctl is-active --quiet rke2-server.service; then ec>
-    Process: 2491 ExecStartPre=/sbin/modprobe br_netfilter (code=exited, status=0/SUCCESS)
-    Process: 2495 ExecStartPre=/sbin/modprobe overlay (code=exited, status=0/SUCCESS)
-   Main PID: 2501 (rke2)
-      Tasks: 86
-        CPU: 1min 9.904s
-     CGroup: /system.slice/rke2-agent.service
-             ├─2501 "/opt/rke2/bin/rke2 agent"
-             ├─2525 containerd -c /var/lib/rancher/rke2/agent/etc/containerd/config.toml
-lines 1-14
-```
+**verify**: `sudo systemctl status rke2-agent.service`
 
-2. Copy the kubeconfig from the server:
+### 2.3. Allow the firewall on `agent.example.com` to allow connection
+Worker-to-server traffic (kubelet, CNI, `kubectl exec`/`logs`/`port-forward`, metrics scraping) needs the same trust rules as the server:
 ```bash
-sudo mkdir -p ~/.kube
-sudo scp tux@server:/etc/rancher/rke2/rke2.yaml ~/.kube/config
-sudo chmod +x ~/.kube/config
-sudo chown $(id -u):$(id -g) ~/.kube/config
-```
-verify: the `tux tux` should appear rather than `root root` else the permission issue will happen.
-```bash
-tux@agent:~> ls -l ~/.kube/config 
--rwx--x--x. 1 tux tux 2968 Oct 15 15:46 /home/tux/.kube/config
-tux@agent:~> 
-```
-3. RKE2 writes `server: https://127.0.0.1:6443` in the kubeconfig by default, which only works when run *on* the server itself. Point it at the real server address instead:
-```bash
-sed -i 's/127.0.0.1/172.30.170.3/' ~/.kube/config
-```
-4. Verify:
-```bash
-kubectl get nodes
+sudo firewall-cmd --zone=trusted --add-source=172.30.170.0/24 --permanent
+sudo firewall-cmd --zone=trusted --add-source=10.42.0.0/16 --permanent
+sudo firewall-cmd --zone=trusted --add-source=10.43.0.0/16 --permanent
+sudo firewall-cmd --reload
 ```
 
 # for `rke201-lab-mac`
@@ -215,7 +134,7 @@ sudo chmod +x /usr/local/bin/kubectl
 2. Copy the kubeconfig from the server:
 ```bash
 mkdir -p ~/.kube
-sudp scp tux@server:/etc/rancher/rke2/rke2.yaml ~/.kube/config
+scp tux@server:/etc/rancher/rke2/rke2.yaml ~/.kube/config
 chmod 600 ~/.kube/config
 ```
 3. RKE2 writes `server: https://127.0.0.1:6443` in the kubeconfig by default, which only works when run *on* the server itself. Point it at the real server address instead:
@@ -320,10 +239,6 @@ cd /var/lib/cni/networks/k8s-pod-network/
 rm -rf *
 shutdown -r now
 ```
-verify:
-```bash
-sudo ls /var/lib/cni/networks/k8s-pod-network/
-```
 
 ### 5.8 Install `kubens`
 ```bash
@@ -332,35 +247,4 @@ sudo ln -s /opt/kubectx/kubectx /usr/local/bin/kubectx
 sudo ln -s /opt/kubectx/kubens /usr/local/bin/kubens
 sudo chmod +x /usr/local/bin/kubectx /usr/local/bin/kubens
 
-```
-
-# Example for testing:
-```bash
-kubectl create deployment webserver --image=nginx --replicas=3
-kubectl expose deployment webserver --port=8080 --target-port=80 --type=NodePort
-```
-verify: open `http://server.example.com:31732/` to see result.
-```
-tux@agent:~> kubectl get all
-NAME                             READY   STATUS    RESTARTS   AGE
-pod/webserver-69b4bbdf75-l7n4z   1/1     Running   0          5m
-pod/webserver-69b4bbdf75-qd2fh   1/1     Running   0          5m
-pod/webserver-69b4bbdf75-xpszp   1/1     Running   0          5m
-
-NAME                 TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)          AGE
-service/kubernetes   ClusterIP   10.43.0.1     <none>        443/TCP          3h19m
-service/webserver    NodePort    10.43.44.27   <none>        8080:31732/TCP   3m13s
-
-NAME                        READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/webserver   3/3     3            3           5m
-
-NAME                                   DESIRED   CURRENT   READY   AGE
-replicaset.apps/webserver-69b4bbdf75   3         3         3       5m
-tux@agent:~> 
-```
-
-clear:
-```
-kubectl delete deployment webserver
-kubectl delete service webserver
 ```
